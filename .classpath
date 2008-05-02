@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="filesys"/>
+	<classpathentry kind="src" path="machine"/>
+	<classpathentry kind="src" path="threads"/>
+	<classpathentry kind="src" path="userprog"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry kind="output" path="bin-groovy"/>
+</classpath>

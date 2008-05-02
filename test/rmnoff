@@ -1,0 +1,8 @@
+#!/bin/sh
+
+for FILE in *.coff
+do
+  EXEC=`/usr/ucb/basename $FILE .coff`
+  echo "rm $EXEC"
+  rm $EXEC
+done

@@ -1,0 +1,5 @@
+#!/bin/csh -f
+
+foreach file (*.c)
+   /bin/rm -f $file:r
+end

@@ -1,0 +1,8 @@
+#!/bin/sh
+
+for FILE in *.c
+do
+   TARGET=`/usr/ucb/basename $FILE .c`
+   echo "make $TARGET"
+   make $TARGET
+done
