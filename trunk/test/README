@@ -1,0 +1,27 @@
+This directory contains a variety of user programs useful for testing
+the various Nachos subsystems developed in Assignments 2-4.
+
+	All of the tests which use the "Exec" system call assume that the
+executable for the child process is in the current working directory. The
+easiest way to accomplish this is to create a link in this director to the
+nachos executable you are using, and then run all of the tests from here.
+	
+	The tests in this directory can be built with either of two linker
+scripts. The default is script_continuous for the userprog project. It simply
+places the code, data, and stack contiguously in memory starting at address 0.
+
+	For the VM assignment, you may want to use script_segmented to
+implement segmented paging. Following are the specifications, taken from a
+newsgroup post on the subject:
+
+
+A user program has a 32-bit address space, split into 4 30-bit segments.
+
+* Segment 00 is for code and read-only data (.text and .rdata)
+* Segment 01 is for writable data (.data and .bss)
+* Segment 10 is unused
+* Segment 11 is for the stack
+
+With this model you could think of using a scheme where you have a separate
+page table for each segment and your translation code switches on the 
+top two bits of the address to be translated to decide which page table to use.

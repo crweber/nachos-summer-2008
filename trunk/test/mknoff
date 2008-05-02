@@ -1,0 +1,15 @@
+#!/bin/sh
+
+COFF2NOFF=/home/comp421/Solaris/nachos-3.2/code/bin2/coff2noff
+
+if (test -z "$*") then
+  for FILE in *.coff
+  do
+    EXEC=`/usr/ucb/basename $FILE .coff`
+    echo "coff2noff $FILE $EXEC"
+    $COFF2NOFF $FILE $EXEC
+  done
+else
+  echo "coff2noff $1.coff $1"
+  $COFF2NOFF $1.coff $1
+fi

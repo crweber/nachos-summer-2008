@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+
+<project default="main" basedir=".">
+
+	<echo message="pulling in property files" />
+	<property file="axisservice.properties" />
+
+	<echo message="calling the web services generation ant task: wsgen" />
+	<target name="build">
+		<javac classpath=".:../machine:../filesys:../userprog:../threads:../vm" 
+			srcdir="../" destdir="../bin"/>
+
+	</target>
+	<target name="main" depends="build">
+		<wsgen />
+	</target>
+
+</project>
