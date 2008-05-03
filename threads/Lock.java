@@ -1,5 +1,5 @@
 // Lock.java
-//
+// Test the commit
 // The following class defines a "lock".  A lock can be BUSY or FREE.
 // There are only two operations allowed on a lock: 
 //
