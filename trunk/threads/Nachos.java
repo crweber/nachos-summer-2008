@@ -218,6 +218,19 @@ class Nachos implements Runnable {
 				Assignment1 assgn = new Assignment1();
 				assgn.initialize(Integer.parseInt(args[i+1]), Integer.parseInt(args[i+2]));
 			}
+            
+            if (args[i].equals("-bb")) {
+                // make sure we are provided enough arguments
+                Debug.ASSERT(args[i + 1] != null && args[i + 2] != null);
+                
+                // init our class
+                ProducerConsumer pc = new ProducerConsumer();
+                pc.initialize(Integer.parseInt(args[i + 1]), Integer.parseInt(args[i + 2]));
+                
+                // start a NachosThread with our class
+                NachosThread nachosThread = new NachosThread("ProducerConsumer");
+                nachosThread.fork(pc);
+            }
 
 		}
 
