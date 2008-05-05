@@ -2,19 +2,20 @@ public class CannibalMissionary {
 
 	// 0-free place, 1 - missionary, -1 - cannibal
 	public static int[] boat = new int[3];
+	public static String[] identities = new String[3];
 	public static int available_seats = 3;
 	public static NachosThread[] cannibalThreads;
 	public static NachosThread[] missionaryThreads;
 
 	public static Lock lock = new Lock("boat");
 	public static Condition boat_load = new Condition("boat load");
-	public static Condition cond = new Condition("condition");
 
 	// RowBoat method - make the seats available and print the lucky ones
 	void RowBoat() {
 		available_seats = 3;
-		Debug.printf('t', "Boat left with %d, %d and %d\n", boat[0], boat[1],
-				boat[2]);
+		Debug.printf('+', "Boat left with %s, %s and %s\n", identities[0],
+				identities[1], identities[2]);
+		// let the other threads work
 		boat_load.broadcast(lock);
 	}
 
@@ -23,28 +24,28 @@ public class CannibalMissionary {
 
 		int sum = 0;
 		lock.acquire();
-		Debug.printf('t', "Cannibal %s arrives!", name);
-		while (true) {
+		Debug.printf('+', "Cannibal %s arrives!\n", name);
 
-			for (int i = available_seats - 1; i >= 0; i--) {
-				sum += boat[i];
-			}
-			// Already one cannibal on the boat, so we cannot have the second
-			// one
-			if (sum == 0 && available_seats == 1) {
-				Debug.printf('t', "Cannibal %s has no place!", name);
-				boat_load.wait(lock);
-				// continue;
-			}
-			break;
+		for (int i = 2; i > available_seats - 1; i--) {
+
+			sum += boat[i];
+		}
+		System.out.println(sum);
+		// Already one cannibal on the boat, so we cannot have the second
+		// one
+		if (sum == 0 && available_seats == 1) {
+			Debug.printf('+', "Cannibal %s has no place!\n", name);
+			boat_load.wait(lock);
+
 		}
 
 		// Put cannibal in boat
 		boat[available_seats - 1] = -1;
-		Debug.printf('t', "Cannibal %s loaded in the boat on seat %d", name,
+		identities[available_seats - 1] = name;
+		Debug.printf('+', "Cannibal %s loaded in the boat on seat %d\n", name,
 				available_seats - 1);
 		available_seats--;
-		if (available_seats - 1 == 0) {
+		if (available_seats == 0) {
 			RowBoat();
 		} else {
 			boat_load.wait(lock);
@@ -52,7 +53,7 @@ public class CannibalMissionary {
 
 		lock.release();
 
-		Debug.printf('t', "Cannibal %s crossed the river", name);
+		Debug.printf('+', "Cannibal %s crossed the river\n", name);
 
 	}
 
@@ -60,28 +61,26 @@ public class CannibalMissionary {
 	void MissionaryArrives(String name) {
 		int sum = 0;
 		lock.acquire();
-		Debug.printf('t', "Missionary %s arrives!", name);
-		while (true) {
+		Debug.printf('t', "Missionary %s arrives!\n", name);
 
-			for (int i = available_seats - 1; i >= 0; i--) {
-				sum += boat[i];
-			}
-			// Already two cannibals on the boat, so we cannot have a missionary
+		for (int i = 2; i > available_seats - 1; i--) {
+			sum += boat[i];
+		}
+		// Already two cannibals on the boat, so we cannot have a missionary
+		
+		if (sum == -2 && available_seats == 1) {
+			Debug.printf('+', "Missionary %s has no place!\n", name);
+			boat_load.wait(lock);
 
-			if (sum == -2 && available_seats == 2) {
-				Debug.printf('t', "Missionary %s has no place!", name);
-				boat_load.wait(lock);
-				// continue;
-			}
-			break;
 		}
 
 		// Put missionary in boat
 		boat[available_seats - 1] = 1;
-		Debug.printf('t', "Missionary %s loaded in the boat on seat %d", name,
-				available_seats - 1);
+		identities[available_seats - 1] = name;
+		Debug.printf('+', "Missionary %s loaded in the boat on seat %d\n",
+				name, available_seats - 1);
 		available_seats--;
-		if (available_seats - 1 == 0) {
+		if (available_seats == 0) {
 			RowBoat();
 		} else {
 			boat_load.wait(lock);
@@ -89,7 +88,7 @@ public class CannibalMissionary {
 
 		lock.release();
 
-		Debug.printf('t', "Missionary %s crossed the river", name);
+		Debug.printf('+', "Missionary %s crossed the river\n", name);
 
 	}
 
@@ -123,24 +122,27 @@ public class CannibalMissionary {
 
 	}
 
-	public void init(int noOfCannibals, int noOfMissionaries){
+	public void init(int noOfCannibals, int noOfMissionaries) {
 		cannibalThreads = new NachosThread[noOfCannibals];
 		missionaryThreads = new NachosThread[noOfMissionaries];
-		
-		for (int i = 0; i < noOfCannibals; i++){
+
+		for (int i = 0; i < noOfCannibals; i++) {
 			cannibalThreads[i] = new NachosThread("cannibal " + i);
 		}
-		for (int i = 0; i < noOfMissionaries; i++){
+		for (int i = 0; i < noOfMissionaries; i++) {
 			missionaryThreads[i] = new NachosThread("missionary " + i);
 		}
-		
-		for (int i = 0; i < noOfCannibals; i++){
+
+		for (int i = 0; i < noOfCannibals - 1; i++) {
 			cannibalThreads[i].fork(new CannibalRunnable("cannibal " + i));
 		}
-		
-		for (int i = 0; i < noOfCannibals; i++){
-			missionaryThreads[i].fork(new MissionaryRunnable("missionary " + i));
+
+		for (int i = 0; i < noOfCannibals; i++) {
+			missionaryThreads[i]
+					.fork(new MissionaryRunnable("missionary " + i));
 		}
+		cannibalThreads[noOfCannibals - 1].fork(new CannibalRunnable(
+				"cannibal " + (noOfCannibals - 1)));
 	}
 
 }
