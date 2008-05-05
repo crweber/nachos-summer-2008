@@ -1,13 +1,13 @@
 /*
  * Implement producer/consumer communication through a bounded buffer, using locks and condition
  * variables.
- * The producer places characters from the string ”Hello world” into the buffer one character at a time; it
+ * The producer places characters from the string "Hello world" into the buffer one character at a time; it
  * must wait if the buffer is full. The consumer pulls characters out of the buffer one at a time and prints
  * them to the screen; it must wait if the buffer is empty. Test your solution with a multi-character buffer
  * and with multiple producers and consumers. Of course, with multiple producers or consumers, the
  * output display will be gobbledygook. However, note that a correct solution will not produce arbitrary
  * output!
- * Make sure your solution can be run using the command line “nachos -bb <numProducers> <numConsumers>”.
+ * Make sure your solution can be run using the command line "nachos -bb <numProducers> <numConsumers>".
  */
 public class ProducerConsumer implements Runnable {
 
@@ -20,8 +20,11 @@ public class ProducerConsumer implements Runnable {
     // variable indicating how many empty slots we have on the buffer
     public static int available = BUFFER_SIZE;
     
+    // character that indicates EOF
+    public static final char EOF = (char)0;
+    
     // string that will be "produced"
-    public static final char[] RESOURCE = "Hello world".toCharArray();
+    public static final char[] RESOURCE = ("Hello world" + EOF).toCharArray();
     private static int resourcePointer = 0;
     
     // number of producers, consumers
@@ -71,6 +74,11 @@ public class ProducerConsumer implements Runnable {
                 // get the lock, since we will read/modify the state variables
                 stateVariablesLock.acquire();
                 
+                // if we reached to EOF, just return
+                if (RESOURCE[resourcePointer] == EOF) {
+                    return;
+                }
+                
                 // check if we can produce
                 while (available == 0) {
                     // we cannot produce, wait until someone signals us
@@ -83,8 +91,8 @@ public class ProducerConsumer implements Runnable {
                 Debug.println('+', ">>> " + index + " PRODUCED: " + product + " <<<");
                 
                 // modify the variables
-                resourcePointer = (resourcePointer + 1) % RESOURCE.length;
                 producerPointer = (producerPointer + 1) % BUFFER_SIZE;
+                resourcePointer++;
                 available--;
                 
                 // notify the consumers that there's something to consume
