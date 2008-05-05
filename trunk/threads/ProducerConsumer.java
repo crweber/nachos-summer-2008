@@ -1,4 +1,4 @@
-/*
+/**
  * Implement producer/consumer communication through a bounded buffer, using locks and condition
  * variables.
  * The producer places characters from the string "Hello world" into the buffer one character at a time; it
@@ -152,7 +152,7 @@ public class ProducerConsumer implements Runnable {
         
     } // class
     
-    /*
+    /**
      * Initializes this class with the number of producers, consumers and the buffer
      */
     public void initialize(int numProducers, int numConsumers) {
