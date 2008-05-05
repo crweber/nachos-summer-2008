@@ -43,7 +43,7 @@ public class CannibalMissionary {
 		boat[available_seats - 1] = -1;
 		identities[available_seats - 1] = name;
 		Debug.printf('+', "Cannibal %s loaded in the boat on seat %d\n", name,
-				available_seats - 1);
+				new Long(available_seats - 1));
 		available_seats--;
 		if (available_seats == 0) {
 			RowBoat();
@@ -78,7 +78,7 @@ public class CannibalMissionary {
 		boat[available_seats - 1] = 1;
 		identities[available_seats - 1] = name;
 		Debug.printf('+', "Missionary %s loaded in the boat on seat %d\n",
-				name, available_seats - 1);
+				name, new Long(available_seats - 1));
 		available_seats--;
 		if (available_seats == 0) {
 			RowBoat();
