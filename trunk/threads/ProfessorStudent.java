@@ -18,89 +18,106 @@ import java.util.Random;
 public class ProfessorStudent implements Runnable {
     
     // number of students
-    private static int numStudents = -1;
+    private int numStudents = -1;
     
-    // conditions and locks
-    // this will serialize access to the shared variables
-    private static Lock sharedVarsLock;
-    // this lock is used by the ping-pong conversation between the current
-    // student and the professor
-    private static Lock questionLock;
-    // this will synchronize the professor and the students
-    // waiting for him OUTSIDE his office, basically, this is
-    // to let just one student at a time
-    private static Condition officeCondition;
-    // these will synchronize the professor and the
-    // student that he is currently talking to
-    private static Condition currentStudentCondition;
-    private static Condition professorCondition;
-    // used by the professor to signal the students that he is
-    // ready to take questions
-    private static Condition studentsCondition;
+    // number of questions allowed per student
+    private int numberOfQuestionsAllowed;
     
-    // number of students currently waiting
+    // number of students waiting for the prof
     private static int waitingStudents = 0;
     
-    // flag inditicating whether the prof is busy or not
-    // init to true to force students to wait even if the professor is not in
-    // (i.e., Professor thread has not started)
-    private static boolean professorIsBusy = true;
+    // used by the professor to wait for students to ask a question
+    private static Semaphore professor = new Semaphore("Professor", 0);
     
-    // variable indicating which student the professor is helping
-    private static String currentlyHelping;
-
+    // the student and the professor use these two conditions to communicate
+    private static Semaphore professorToken = new Semaphore("ProfessorToken", 0);
+    private static Semaphore studentToken = new Semaphore("StudentToken", 0);
+    
+    // lock to modify shared variables
+    private static Lock sharedVariables = new Lock("SharedVariables");
+    
+    // once a student gets into the office, he "locks" it, so no other student
+    // gets into it to ask questions
+    private static Lock office = new Lock("Office");
+    
+    // pseudo-random number generator, for fun, for the answers/questions
+    private static Random generator = new Random(8755);
+    
+    public ProfessorStudent(int numStudents, int numberOfQuestionsAllowed) {
+        Debug.ASSERT(numStudents >= 0, "Number of students cannot be negative!");
+        this.numStudents = numStudents;
+        this.numberOfQuestionsAllowed =  numberOfQuestionsAllowed;
+    }
+    
     /**
-     * Doesn't return until a question has been asked
+     * This method will create as many students threads as needed and one professor thread.
      */
-    protected void AnswerStart() {
-        // we have to acquire the lock in order to wait for a question
-        sharedVarsLock.acquire();
-        Debug.println('t', "Waiting for a student to ask.");
+    public void run() {
+        Debug.printf('x', "Starting Professor with %d students\n", new Long(numStudents));
+        Debug.printf('x', "Each student is allowed to ask [%d] questions (-1 == infinite)\n", new Long(numberOfQuestionsAllowed));
         
-        // the professor should not sleep if there are students waiting for him
-        // no need to be a while, since there is only one professor, however, 
-        // this will yield more robust code that will work for N professors
+        // first, create the professor thread
+        NachosThread professorThread = new NachosThread("Professor");
+        professorThread.fork(new Professor());
+        
+        // now, the students
+        for (int i = 0; i < numStudents; i++) {
+            NachosThread studentThread = new NachosThread("Student #" + i);
+            studentThread.fork(new Student(numberOfQuestionsAllowed));
+            
+        } // for
+        
+    } // run
+    
+    /**
+     * From an array of Objects, it will return a random element.
+     * 
+     * @param array The array of objects.
+     * 
+     * @return The random element.
+     */
+    private Object getRandomElement(Object[] array) {
+        return array[(int)(Math.random() * (array.length - 1))]; 
+        
+    } // getRandomElement
+    
+    /**
+     * AnswerStart doesn't return until a question has been asked.
+     */
+    private void AnswerStart() {
+        // if there's no one at the door, sleep
         while (waitingStudents == 0) {
-            Debug.println('t', "No students. About to sleep.");
-            professorIsBusy = false;
-            officeCondition.wait(sharedVarsLock);
+            Debug.println('x', "[AnswerStart] Professor says: No students. NAP TIME!");
+            Debug.println('e', "[AnswerStart] (Professor) professor.P()");
+            professor.P();
         }
         
-        // we woke up, someone knocked on the door!
-        professorIsBusy = true;
-        Debug.printf('t', "%s is knocking the door.\n", currentlyHelping);
-        Debug.printf('t', "Professor sees %d students... Sigh...\n", new Long(waitingStudents));
+        // modify shared variables, getting the lock first
+        sharedVariables.acquire();
+        waitingStudents--;
+        sharedVariables.release();
         
-        // signal the students that the prof is ready
-        studentsCondition.signal(sharedVarsLock);
-
-        // and release the lock
-        sharedVarsLock.release();
+        // we were either waken up from our nap or there were students waiting already
+        // if there's a student already in the office, wait for him to leave
+        Debug.println('x', "[AnswerStart] Professor says: Next please!");
+        Debug.println('e', "[AnswerStart] (Professor) professorToken.P()");
+        professorToken.P();
         
-        // tell the student we're ready for a question 
-        questionLock.acquire();
-        currentStudentCondition.signal(questionLock);
-        // wait for the student to pose a question
-        professorCondition.wait(questionLock);
-        questionLock.release();
+        // signal the student to come in
+        Debug.println('e', "[AnswerStart] (Professor) studentToken.V()");
+        studentToken.V();
+        
+        Debug.println('x', "[AnswerStart] Professor says: Come in please.");
+        
+        // and now, wait for a question to be asked
+        Debug.println('e', "[AnswerStart] (Professor) professorToken.P()");
+        professorToken.P();
         
     } // AnswerStart
     
-    /**
-     * Gives a random answer to any question.
-     */
-    protected void GiveAnswer() {
-        // simulate some time
-        Debug.print('t', "Interesting question... Let me think.");
-        for (int i = 0; i <= 5; i++)
-        {
-            try {
-                Thread.sleep(250);
-            }
-            catch (Exception e) {}
-            Debug.print('t', ".");
-        }
-        
+    private void GiveAnswer() {
+        Debug.println('x', "[GiveAnswer] Professor says: Interesting question... Let me think.");
+
         String answers[] = 
         {
             "42", "I'm not sure.", "Definitively.", "I do not understand your question.",
@@ -110,198 +127,140 @@ public class ProfessorStudent implements Runnable {
         };
         
         // generate the answer
-        String answer = getRandomStringFromArray(answers);
-        Debug.printf('t', "Professor answers: %s\n", answer);
+        String answer = (String)getRandomElement(answers);
+        Debug.printf('x', "[GiveAnswer] Professor answers: %s\n", answer);
         
     } // GiveAnswer
     
-    protected void AnswerDone() {
-        // we're done, get the lock
-        sharedVarsLock.acquire();
-        Debug.printf('t', "Finished with student %s. Next please!\n", currentlyHelping);
+    private void AnswerDone() {
+        // signal the student that the answer is done
+        Debug.println('x', "[AnswerDone] Professor says: I hope that helped.");
+        Debug.println('e', "[AnswerDone] (Professor) studentToken.V()");
+        studentToken.V();
         
-        // the prof is not busy anymore
-        professorIsBusy = false;
-        
-        // signal the student that we're done
-        questionLock.acquire();
-        currentStudentCondition.signal(questionLock);
-        questionLock.release();
-        
-        // release the lock
-        sharedVarsLock.release();
+        // and wait for him to leave
+        Debug.println('e', "[AnswerDone] (Professor) professorToken.P()");
+        professorToken.P();
         
     } // AnswerDone
     
     /**
-     * QuestionStart doesn't return until it is the student's turn to ask
-     * a question
+     * QuestionStart() does not return until it is the student's turn to ask a question
      */
-    protected void QuestionStart() {
-        // get the lock to read/write variables
-        sharedVarsLock.acquire();
-        
+    private void QuestionStart() {
         // assume we will wait
+        sharedVariables.acquire();
         waitingStudents++;
+        sharedVariables.release();
+
+        // ok, so lock the office
+        Debug.printf('e', "[QuestionStart] (%s) office.acquire()\n", NachosThread.currentThread().getName());
+        office.acquire();
+
+        // let know the prof we are here
+        Debug.printf('e', "[QuestionStart] (%s) professor.V()\n", NachosThread.currentThread().getName());
+        professor.V();
         
-        // make sure no other student comes in
-        //professorLock.acquire();
+        Debug.printf('x', "[QuestionStart] %s is thinking of a question\n", NachosThread.currentThread().getName());
+        Debug.printf('x', "[QuestionStart] %s is waiting for the prof to open the door\n", NachosThread.currentThread().getName());
+        Debug.printf('e', "[QuestionStart] (%s) professorToken.V()\n", NachosThread.currentThread().getName());
+        professorToken.V();
         
-        // it seems that the prof is there... just double check he is not busy
-        while (professorIsBusy) {
-            studentsCondition.wait(sharedVarsLock);
-        }
+        // if the prof was with another student
         
-        // knock on the door
-        officeCondition.signal(sharedVarsLock);
-        
-        // ok, so the prof let us in
-        // save the name of this student
-        currentlyHelping = NachosThread.thisThread().getName();
-        Debug.printf('t', "%s will ask a question\n", currentlyHelping);
-        
-        // we're not waiting anymore, we can proceed
-        waitingStudents--;
-        
-        // release the lock
-        sharedVarsLock.release();
-        
-        // wait for the prof to tell us that it's ok to ask
-        questionLock.acquire();
-        currentStudentCondition.wait(questionLock);
-        questionLock.release();
-        
+        // and wait the prof to listen
+        Debug.printf('e', "[QuestionStart] (%s) studentToken.P()\n", NachosThread.currentThread().getName());
+        studentToken.P();
+        Debug.printf('x', "[QuestionStart] %s says: \"Hello Prof!\" and gets into the office\n", NachosThread.currentThread().getName());
+                
     } // QuestionStart
     
-    /**
-     * Asks a simple question
-     */
-    protected void QuestionAsk() {
+    private void AskQuestion() {
         String questions[] =
         {
             "What is the 1001th prime number?", "What is the last digit of PI?", "What is the answer for all questions?",
             "How can one compute the real component of the square root of -1?", "Why do we use greek letters instead of latin ones?",
-            "What is the sound of one hand?"
+            "What is the sound of one hand?", "Why is the sky blue?", "Why do we always see the same side of the moon?",
+            "What's on the deep end of the pool?", "Do babies really come from Paris?"
         };
 
         // generate question
-        String question = getRandomStringFromArray(questions);
-        Debug.printf('t', "%s asks: %s\n", currentlyHelping, question);
+        String question = (String)getRandomElement(questions);
+        Debug.printf('x', "[AskQuestion] %s asks: %s\n", NachosThread.currentThread().getName(), question);
+
         
-        // ask the prof
-        questionLock.acquire();
-        professorCondition.signal(questionLock);
-        questionLock.release();
+        // signal the professor
+        Debug.printf('e', "[AskQuestion] (%s) professorToken.V()\n", NachosThread.currentThread().getName());
+        professorToken.V();
         
-    } // QuestionAsk
+    } // AskQuestion
     
     /**
-     * Should not return until the professor has finished answering the question
+     * QuestionEnd() should not return until the professor has finished answering the question.
      */
-    protected void QuestionDone() {
-        // wait for the professor to answer
-        questionLock.acquire();
-        currentStudentCondition.wait(questionLock);
+    private void QuestionDone() {
+        // we must wait for the prof to be done
+        Debug.printf('x', "[QuestionDone] %s is waiting for an answer.\n", NachosThread.currentThread().getName());
+        Debug.printf('e', "[QuestionDone] (%s) studentToken.P()\n", NachosThread.currentThread().getName());
+        studentToken.P();
         
-        Debug.printf('t', "%s says: Thanks, that makes lots of sense, professor", currentlyHelping);
+        // the professor answered
+        Debug.printf('x', "[QuestionDone] %s says: Thanks for the answer!\n", NachosThread.thisThread().getName());
         
-        questionLock.release();
+        // leave
+        Debug.printf('e', "[QuestionDone] (%s) professorToken.V()\n", NachosThread.currentThread().getName());
+        professorToken.V();
+        
+        // we're done, so just leave
+        Debug.printf('e', "[QuestionDone] (%s) office.release()\n", NachosThread.currentThread().getName());
+        office.release();
         
     } // QuestionDone
     
-    /**
-     * Constructor.
-     * 
-     * @param numStudents Number of students that will be in the queue.
-     */
-    public ProfessorStudent(int numStudents) {
-        ProfessorStudent.numStudents = numStudents;
-        sharedVarsLock = new Lock("SharedVars");
-        questionLock = new Lock("Question");
-        officeCondition = new Condition("Office");
-        studentsCondition = new Condition("Students");
-        currentStudentCondition = new Condition("CurrentStudent");
-        professorCondition = new Condition("Professor");
-        
-    } // ctor
-    
-    /**
-     * This method will be the one executed by Nachos.
-     */
-    public void run() {
-        // make sure we have a correct number of students
-        Debug.ASSERT(numStudents >= 0, "Number of students cannot be negative!");
-        
-        // build a professor thread
-        NachosThread professorThread = new NachosThread("Professor");
-        professorThread.fork(new Professor());
-        
-        // and the students threads
-        for (int i = 0; i < numStudents; i++) {
-            NachosThread studentThread = new NachosThread("Student_" + i);
-            studentThread.fork(new Student(i));
-            
-        } // for
-
-    } // run
-    
-    /**
-     * Given an array of Strings, returns a random element.
-     */
-    private static String getRandomStringFromArray(String[] array) {
-        Random randomGenerator = new Random();
-        return array[randomGenerator.nextInt(array.length)];
-        
-    } // getRandomStringFromArray
-    
-    /**
-     * The professor loops running the code: AnswerStart(); give answer; AnswerDone(). 
-     * AnswerStart doesn't return until a question has been asked. 
-     */
-    protected class Professor implements Runnable {
+    private class Professor implements Runnable {
         /**
-         * This method will be the one executed by Nachos.
+         * Implements the professor cycle
          */
         public void run() {
-            while (true) {
+            while(true) {
                 AnswerStart();
                 GiveAnswer();
                 AnswerDone();
             }
-            
         } // run
         
     } // class
     
-    /**
-     * Each student loops running the code: QuestionStart(); ask question; QuestionDone(). 
-     * QuestionStart() does not return until it is the student's turn to ask a question.
-     */
-    protected class Student implements Runnable {
-        private int id = -1;
+    private class Student implements Runnable {
+        // each student is allowed to ask this many questions, -1 if infinite
+        private int numberOfQuestionsAllowed = -1;
         
         /**
          * Constructor.
          * 
-         * @param id The id this student will have. Cannot be negative.
+         * @param numberOfQuestionsAllowed How many questions is this student allowed to ask
          */
-        public Student(int id) {
-            this.id = id;
+        public Student(int numberOfQuestionsAllowed) {
+            this.numberOfQuestionsAllowed = numberOfQuestionsAllowed;
             
         } // ctor
         
         /**
-         * This method will be the one executed by Nachos.
+         * Implements the student cycle
          */
         public void run() {
-            // make sure we have a correct id
-            Debug.ASSERT(id >= 0, "Student ID cannot be negative!");
-            while (true) {
+            while(true) {
+                if (numberOfQuestionsAllowed > 0) {
+                    numberOfQuestionsAllowed--;
+                } else if (numberOfQuestionsAllowed == 0) {
+                    return;
+                }
                 QuestionStart();
-                QuestionAsk();
+                AskQuestion();
                 QuestionDone();
+                NachosThread.thisThread().Yield();
             }
-        } // run
+        }
         
     } // class
 

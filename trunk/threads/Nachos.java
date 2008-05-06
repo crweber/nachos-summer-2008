@@ -240,6 +240,27 @@ class Nachos implements Runnable {
                 NachosThread nachosThread = new NachosThread("ProducerConsumer");
                 nachosThread.fork(pc);
             }
+            
+            if (args[i].equals("-prof")) {
+                // make sure we are provided with enough arguments
+                Debug.ASSERT(args[i + 1] != null, "Number of students is required after -prof");
+                
+                // parse the optional argument, # of questions per student
+                int numberOfQuestionsAllowed = -1;
+                try {
+                    numberOfQuestionsAllowed = Integer.parseInt(args[i + 2]);
+                }
+                catch (Exception e) {
+                    // doesn't matter at all
+                }
+                
+                // init the class
+                ProfessorStudent ps = new ProfessorStudent(Integer.parseInt(args[i + 1]), numberOfQuestionsAllowed);
+                
+                // start a nachos thread with the professor/student class
+                NachosThread nachosThread = new NachosThread("ProfessorStudent");
+                nachosThread.fork(ps);
+            }
 
 		}
 
