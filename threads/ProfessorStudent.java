@@ -27,7 +27,7 @@ public class ProfessorStudent implements Runnable {
     private static int waitingStudents = 0;
     
     // used by the professor to wait for students to ask a question
-    private static Semaphore professor = new Semaphore("Professor", 0);
+    private static Condition professor = new Condition("Professor");
     
     // the student and the professor use these two conditions to communicate
     private static Semaphore professorToken = new Semaphore("ProfessorToken", 0);
@@ -39,9 +39,6 @@ public class ProfessorStudent implements Runnable {
     // once a student gets into the office, he "locks" it, so no other student
     // gets into it to ask questions
     private static Lock office = new Lock("Office");
-    
-    // pseudo-random number generator, for fun, for the answers/questions
-    private static Random generator = new Random(8755);
     
     public ProfessorStudent(int numStudents, int numberOfQuestionsAllowed) {
         Debug.ASSERT(numStudents >= 0, "Number of students cannot be negative!");
@@ -85,15 +82,16 @@ public class ProfessorStudent implements Runnable {
      * AnswerStart doesn't return until a question has been asked.
      */
     private void AnswerStart() {
+        // modify shared variables, getting the lock first
+        sharedVariables.acquire();
+        
         // if there's no one at the door, sleep
         while (waitingStudents == 0) {
             Debug.println('x', "[AnswerStart] Professor says: No students. NAP TIME!");
             Debug.println('e', "[AnswerStart] (Professor) professor.P()");
-            professor.P();
+            professor.wait(sharedVariables);
         }
         
-        // modify shared variables, getting the lock first
-        sharedVariables.acquire();
         waitingStudents--;
         sharedVariables.release();
         
@@ -159,7 +157,7 @@ public class ProfessorStudent implements Runnable {
 
         // let know the prof we are here
         Debug.printf('e', "[QuestionStart] (%s) professor.V()\n", NachosThread.currentThread().getName());
-        professor.V();
+        professor.signal(office);
         
         Debug.printf('x', "[QuestionStart] %s is thinking of a question\n", NachosThread.currentThread().getName());
         Debug.printf('x', "[QuestionStart] %s is waiting for the prof to open the door\n", NachosThread.currentThread().getName());
