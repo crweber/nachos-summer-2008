@@ -18,184 +18,186 @@ import java.math.MathContext;
  */
 public class Whale implements Runnable {
 
-    // number of females and males available
-    private int numFemales;
+	// number of females and males available
+	private int numFemales;
 
-    private int numMales;
+	private int numMales;
 
-    // is there a female/male/matchmaker ready?
-    private boolean femaleReady;
+	// is there a female/male/matchmaker ready?
+	private boolean femaleReady;
 
-    private boolean maleReady;
+	private boolean maleReady;
 
-    private boolean matchMakerReady;
+	private boolean matchMakerReady;
 
-    // is there a pair already?
-    private Condition coupleReady = new Condition("CoupleReady");
+	// is there a pair already?
+	private Condition coupleReady = new Condition("CoupleReady");
 
-    // only one male/female thread should execute certains part of the code
-    private Lock maleLock = new Lock("MaleLock");
+	// only one male/female thread should execute certains part of the code
+	private Lock maleLock = new Lock("MaleLock");
 
-    private Lock femaleLock = new Lock("FemaleLock");
+	private Lock femaleLock = new Lock("FemaleLock");
 
-    private Lock matchMakerLock = new Lock("MatchmakerLock");
+	private Lock matchMakerLock = new Lock("MatchmakerLock");
 
-    private Lock conditionLock = new Lock("ConditionLock");
+	private Lock conditionLock = new Lock("ConditionLock");
 
-    // names of the whales that are mating right now
-    // index 0 for males, 1 for females
-    private String[] whaleNames = new String[2];
+	// names of the whales that are mating right now
+	// index 0 for males, 1 for females
+	private String[] whaleNames = new String[2];
 
-    /**
-     * Constructor.
-     * 
-     * @param numFemales
-     * @param numMales
-     */
-    public Whale(int numMales, int numFemales) {
-        Debug.ASSERT(numMales >= 0 && numFemales >= 0,
-                "Number of males and females cannot be negative.");
+	/**
+	 * Constructor.
+	 * 
+	 * @param numFemales
+	 * @param numMales
+	 */
+	public Whale(int numMales, int numFemales) {
+		Debug.ASSERT(numMales >= 0 && numFemales >= 0,
+				"Number of males and females cannot be negative.");
 
-        this.numFemales = numFemales;
-        this.numMales = numMales;
+		this.numFemales = numFemales;
+		this.numMales = numMales;
 
-    } // ctor
+	} // ctor
 
-    public void run() {
-        // create male, female and matchmaker threads
-        for (int i = 0; i < numMales; i++) {
-            NachosThread maleThread = new NachosThread("MaleThread " + i);
-            maleThread.fork(new WhaleThread(true, "Male #" + i));
-        }
+	public void run() {
+		// create male, female and matchmaker threads
+		for (int i = 0; i < numMales; i++) {
+			NachosThread maleThread = new NachosThread("MaleThread " + i);
+			maleThread.fork(new WhaleThread(true, "Male #" + i));
+		}
 
-        for (int i = 0; i < numFemales; i++) {
-            NachosThread femaleThread = new NachosThread("FemaleThread " + i);
-            femaleThread.fork(new WhaleThread(false, "Female #" + i));
-        }
+		for (int i = 0; i < numFemales; i++) {
+			NachosThread femaleThread = new NachosThread("FemaleThread " + i);
+			femaleThread.fork(new WhaleThread(false, "Female #" + i));
+		}
 
-    } // run
+	} // run
 
-    private void Male(String name) {
-        Debug.println('e', "Male() BEGIN");
-        numMales--;
-        maleReady = true;
-        whaleNames[0] = name;
-        conditionLock.acquire();
-        coupleReady.broadcast(conditionLock);
+	private void Male(String name) {
+		Debug.println('e', "Male() BEGIN");
+		numMales--;
+		maleReady = true;
+		whaleNames[0] = name;
+		conditionLock.acquire();
+		coupleReady.broadcast(conditionLock);
 
-        while (femaleReady == false) {
-            // wait until someone signals us
-            coupleReady.wait(conditionLock);
+		while (femaleReady == false) {
+			// wait until someone signals us
+			coupleReady.wait(conditionLock);
 
-        } // while
+		} // while
 
-        // tell the other whale we're ready
-        coupleReady.broadcast(conditionLock);
+		// tell the other whale we're ready
+		coupleReady.broadcast(conditionLock);
 
-        while (matchMakerReady == false) {
-            coupleReady.wait(conditionLock);
-        }
-        conditionLock.release();
-        Debug.println('e', "Male() END");
-    }
+		while (matchMakerReady == false) {
+			coupleReady.wait(conditionLock);
+		}
+		conditionLock.release();
+		Debug.println('e', "Male() END");
+	}
 
-    private void Female(String name) {
-        Debug.println('e', "Female() BEGIN");
-        numFemales--;
-        femaleReady = true;
-        whaleNames[1] = name;
-        conditionLock.acquire();
-        coupleReady.broadcast(conditionLock);
+	private void Female(String name) {
+		Debug.println('e', "Female() BEGIN");
+		numFemales--;
+		femaleReady = true;
+		whaleNames[1] = name;
+		conditionLock.acquire();
+		coupleReady.broadcast(conditionLock);
 
-        while (maleReady == false) {
-            // wait until someone signals us
-            coupleReady.wait(conditionLock);
+		while (maleReady == false) {
+			// wait until someone signals us
+			coupleReady.wait(conditionLock);
 
-        } // while
+		} // while
 
-        // tell the other whale we're ready
-        coupleReady.broadcast(conditionLock);
+		// tell the other whale we're ready
+		coupleReady.broadcast(conditionLock);
 
-        while (matchMakerReady == false) {
-            coupleReady.wait(conditionLock);
-        }
-        conditionLock.release();
-        Debug.println('e', "Female() END");
-    }
+		while (matchMakerReady == false) {
+			coupleReady.wait(conditionLock);
+		}
+		conditionLock.release();
+		Debug.println('e', "Female() END");
+	}
 
-    private void Matchmaker() {
-        Debug.println('e', "Matchmaker() BEGIN");
-        matchMakerLock.acquire();
-        conditionLock.acquire();
+	private void Matchmaker() {
+		Debug.println('e', "Matchmaker() BEGIN");
 
-        // matchmaker just makes sure that there's enough numbers...
-        if ((numFemales + numMales) > 0) {
-            matchMakerReady = true;
-            coupleReady.broadcast(conditionLock);
-        }
+		// matchMakerLock.acquire();
+		conditionLock.acquire();
 
-        while (femaleReady == false || maleReady == false) {
-            coupleReady.wait(conditionLock);
-        }
+		// matchmaker just makes sure that there's enough numbers...
+		if ((numFemales + numMales) > 0) {
+			matchMakerReady = true;
+			coupleReady.broadcast(conditionLock);
+		}
 
-        matchMakerReady = false;
-        maleReady = false;
-        femaleReady = false;
-        conditionLock.release();
-        matchMakerLock.release();
-        Debug.printf('x', "%s and %s are mating!\n", whaleNames);
-        Debug.println('e', "Matchmaker() END");
-    }
+		while (femaleReady == false || maleReady == false) {
+			coupleReady.wait(conditionLock);
+		}
 
-    class WhaleThread implements Runnable {
-        // flag indicating sex of this whale
-        private boolean isMale;
+		matchMakerReady = false;
+		maleReady = false;
+		femaleReady = false;
+		conditionLock.release();
+		// matchMakerLock.release();
+		System.out.println("Matting" + whaleNames[0] + " " + whaleNames[1]);
+		Debug.printf('x', "%s and %s are mating!\n", whaleNames);
+		Debug.println('e', "Matchmaker() END");
+	}
 
-        // name of this whale
-        private String name;
+	class WhaleThread implements Runnable {
+		// flag indicating sex of this whale
+		private boolean isMale;
 
-        /**
-         * Constructor.
-         * 
-         * @param isMale
-         * @param name
-         */
-        public WhaleThread(boolean isMale, String name) {
-            this.isMale = isMale;
-            this.name = name;
+		// name of this whale
+		private String name;
 
-        } // ctor
+		/**
+		 * Constructor.
+		 * 
+		 * @param isMale
+		 * @param name
+		 */
+		public WhaleThread(boolean isMale, String name) {
+			this.isMale = isMale;
+			this.name = name;
 
-        public void run() {
-            // acquire the lock we need
-            if (maleReady == true && femaleReady == true) {
-                matchMakerLock.acquire();
-            } else if (isMale) {
-                maleLock.acquire();
-            } else {
-                femaleLock.acquire();
-            }
+		} // ctor
 
-            // there will be one whale less
-            if (isMale) {
-                Male(name);
-            } else {
-                Female(name);
-            }
+		public void run() {
+			// acquire the lock we need
+			if (maleReady == true && femaleReady == true) {
+				matchMakerLock.acquire();
+			} else if (isMale) {
+				maleLock.acquire();
+			} else {
+				femaleLock.acquire();
+			}
 
-            if (maleReady == true && femaleReady == true) {
-                Matchmaker();
-            }
+			// there will be one whale less
+			if (maleReady == true && femaleReady == true) {
+				Matchmaker();
+			} else if (isMale) {
+				Male(name);
+			} else {
+				Female(name);
+			}
 
-            // releae the lock we got
-            if (isMale) {
-                maleLock.release();
-            } else {
-                femaleLock.release();
-            }
+			// release the lock we got
+			if (matchMakerLock.isHeldByCurrentThread()) {
+				matchMakerLock.release();
+			} else if (isMale) {
+				maleLock.release();
+			} else {
+				femaleLock.release();
+			}
 
-        } // run
+		} // run
 
-    } // class
+	} // class
 
 } // class
