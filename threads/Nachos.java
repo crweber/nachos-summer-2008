@@ -216,8 +216,8 @@ class Nachos implements Runnable {
 			if (args[i].equals("-whales")){
 				
 				Debug.ASSERT(args[i+1]!= null && args[i+2] != null);
-				Assignment1 assgn = new Assignment1();
-				assgn.initialize(Integer.parseInt(args[i+1]), Integer.parseInt(args[i+2]));
+                NachosThread nachosThread = new NachosThread("MainWhaleThread");
+				nachosThread.fork(new Whale(Integer.parseInt(args[i+1]), Integer.parseInt(args[i+2])));
 			}
 			
 			if (args[i].equals("-boats")){
