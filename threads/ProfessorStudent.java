@@ -27,9 +27,20 @@ public class ProfessorStudent implements Runnable {
     private static int waitingStudents = 0;
     
     // used by the professor to wait for students to ask a question
+    // it is a condition since signaling without anybody waiting should be
+    // ignored. semaphores 'remember' signals. 
+    // the professor will wait if waitingStudents is 0, if somehow a student
+    // reaches the signal call before the professor, it means (we force the students
+    // to increment waitingStudents after acquiring a lock) that the student increment
+    // the waitingStudents variable, thus, the professor will not 'wait' (take a nap)
     private static Condition professor = new Condition("Professor");
     
     // the student and the professor use these two conditions to communicate
+    // we thought of semaphores, since the students might 'signal' the professor before
+    // the professor is ready... in this way, it is irrelevant whether the students
+    // wait for the professor to arrive (Professor thread to be created), or the
+    // professor sleeps while waits for the students to arrive (Student threads to
+    // be created)
     private static Semaphore professorToken = new Semaphore("ProfessorToken", 0);
     private static Semaphore studentToken = new Semaphore("StudentToken", 0);
     
@@ -37,7 +48,8 @@ public class ProfessorStudent implements Runnable {
     private static Lock sharedVariables = new Lock("SharedVariables");
     
     // once a student gets into the office, he "locks" it, so no other student
-    // gets into it to ask questions
+    // gets into it to ask questions, other students trying to get the professor
+    // will block here
     private static Lock office = new Lock("Office");
     
     public ProfessorStudent(int numStudents, int numberOfQuestionsAllowed) {
@@ -82,13 +94,14 @@ public class ProfessorStudent implements Runnable {
      * AnswerStart doesn't return until a question has been asked.
      */
     private void AnswerStart() {
+        Debug.println('x', "[AnswerStart] BEGIN");
         // modify shared variables, getting the lock first
         sharedVariables.acquire();
         
         // if there's no one at the door, sleep
         while (waitingStudents == 0) {
             Debug.println('x', "[AnswerStart] Professor says: No students. NAP TIME!");
-            Debug.println('e', "[AnswerStart] (Professor) professor.P()");
+            Debug.println('e', "[AnswerStart] (Professor) professor.wait()");
             professor.wait(sharedVariables);
         }
         
@@ -111,9 +124,12 @@ public class ProfessorStudent implements Runnable {
         Debug.println('e', "[AnswerStart] (Professor) professorToken.P()");
         professorToken.P();
         
+        Debug.println('x', "[AnswerStart] END");
+        
     } // AnswerStart
     
     private void GiveAnswer() {
+        Debug.println('x', "[GiveAnswer] BEGIN");
         Debug.println('x', "[GiveAnswer] Professor says: Interesting question... Let me think.");
 
         String answers[] = 
@@ -127,18 +143,23 @@ public class ProfessorStudent implements Runnable {
         // generate the answer
         String answer = (String)getRandomElement(answers);
         Debug.printf('x', "[GiveAnswer] Professor answers: %s\n", answer);
+        Debug.println('x', "[GiveAnswer] END");
         
     } // GiveAnswer
     
     private void AnswerDone() {
+        Debug.println('x', "[AnswerDone] BEGIN");
         // signal the student that the answer is done
         Debug.println('x', "[AnswerDone] Professor says: I hope that helped.");
         Debug.println('e', "[AnswerDone] (Professor) studentToken.V()");
         studentToken.V();
         
         // and wait for him to leave
+        Debug.println('x', "[AnswerDone] Professor waits for student to leave the office.");
         Debug.println('e', "[AnswerDone] (Professor) professorToken.P()");
         professorToken.P();
+        
+        Debug.println('x', "[AnswerDone] END");
         
     } // AnswerDone
     
@@ -146,6 +167,8 @@ public class ProfessorStudent implements Runnable {
      * QuestionStart() does not return until it is the student's turn to ask a question
      */
     private void QuestionStart() {
+        Debug.printf('x', "[QuestionStart] (%s) BEGIN\n", NachosThread.currentThread().getName());
+        
         // assume we will wait
         sharedVariables.acquire();
         waitingStudents++;
@@ -156,7 +179,7 @@ public class ProfessorStudent implements Runnable {
         office.acquire();
 
         // let know the prof we are here
-        Debug.printf('e', "[QuestionStart] (%s) professor.V()\n", NachosThread.currentThread().getName());
+        Debug.printf('e', "[QuestionStart] (%s) professor.signal()\n", NachosThread.currentThread().getName());
         professor.signal(office);
         
         Debug.printf('x', "[QuestionStart] %s is thinking of a question\n", NachosThread.currentThread().getName());
@@ -170,10 +193,14 @@ public class ProfessorStudent implements Runnable {
         Debug.printf('e', "[QuestionStart] (%s) studentToken.P()\n", NachosThread.currentThread().getName());
         studentToken.P();
         Debug.printf('x', "[QuestionStart] %s says: \"Hello Prof!\" and gets into the office\n", NachosThread.currentThread().getName());
+        
+        Debug.printf('x', "[QuestionStart] (%s) END\n", NachosThread.currentThread().getName());
                 
     } // QuestionStart
     
     private void AskQuestion() {
+        Debug.printf('x', "[AskQuestion] (%s) BEGIN\n", NachosThread.currentThread().getName());
+        
         String questions[] =
         {
             "What is the 1001th prime number?", "What is the last digit of PI?", "What is the answer for all questions?",
@@ -191,12 +218,16 @@ public class ProfessorStudent implements Runnable {
         Debug.printf('e', "[AskQuestion] (%s) professorToken.V()\n", NachosThread.currentThread().getName());
         professorToken.V();
         
+        Debug.printf('x', "[AskQuestion] (%s) END\n", NachosThread.currentThread().getName());
+        
     } // AskQuestion
     
     /**
      * QuestionEnd() should not return until the professor has finished answering the question.
      */
     private void QuestionDone() {
+        Debug.printf('x', "[QuestionDone] (%s) BEGIN\n", NachosThread.currentThread().getName());
+        
         // we must wait for the prof to be done
         Debug.printf('x', "[QuestionDone] %s is waiting for an answer.\n", NachosThread.currentThread().getName());
         Debug.printf('e', "[QuestionDone] (%s) studentToken.P()\n", NachosThread.currentThread().getName());
@@ -212,6 +243,9 @@ public class ProfessorStudent implements Runnable {
         // we're done, so just leave
         Debug.printf('e', "[QuestionDone] (%s) office.release()\n", NachosThread.currentThread().getName());
         office.release();
+        
+        Debug.printf('x', "[QuestionDone] %s leaves the office.\n", NachosThread.currentThread().getName());
+        Debug.printf('x', "[QuestionDone] (%s) END\n", NachosThread.currentThread().getName());
         
     } // QuestionDone
     
