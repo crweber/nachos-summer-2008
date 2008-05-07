@@ -160,7 +160,7 @@ public class ProducerConsumer implements Runnable {
         this.numConsumers = numConsumers;
         sharedBuffer = new char[BUFFER_SIZE];
         Debug.printf(
-            't', 
+            '+', 
             "Starting %d producers and %d consumers working on a buffer of size %d\n", 
             new Object[] {new Long(numProducers), new Long(numConsumers), new Long(BUFFER_SIZE)});
         
