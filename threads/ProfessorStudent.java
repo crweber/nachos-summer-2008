@@ -1,4 +1,3 @@
-import java.util.Random;
 /**
  * You have been hired by the CS Department to write code to help synchronize a professor and his/her
  * students during office hours. The professor, of course, wants to take a nap if no students are around
