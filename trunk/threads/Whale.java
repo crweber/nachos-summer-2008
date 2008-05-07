@@ -90,13 +90,16 @@ public class Whale implements Runnable {
 		} // while
 
 		// tell the other whale we're ready
-		coupleReady.broadcast(conditionLock);
+		// coupleReady.broadcast(conditionLock);
 
 		while (matchMakerReady == false) {
 			coupleReady.wait(conditionLock);
 		}
+		
 		conditionLock.release();
+
 		Debug.println('e', "Male() END");
+		NachosThread.thisThread().finish();
 	}
 
 	private void Female(String name) {
@@ -114,13 +117,17 @@ public class Whale implements Runnable {
 		} // while
 
 		// tell the other whale we're ready
-		coupleReady.broadcast(conditionLock);
-
+		// coupleReady.broadcast(conditionLock);
+		Debug.println('e', "Female() waiting for Matchmaker");
 		while (matchMakerReady == false) {
 			coupleReady.wait(conditionLock);
 		}
+	
+		
 		conditionLock.release();
+
 		Debug.println('e', "Female() END");
+		NachosThread.thisThread().finish();
 	}
 
 	private void Matchmaker() {
@@ -131,21 +138,26 @@ public class Whale implements Runnable {
 
 		// matchmaker just makes sure that there's enough numbers...
 		if ((numFemales + numMales) > 0) {
+			Debug.println('e', "Matchmaker() broadcast");
 			matchMakerReady = true;
 			coupleReady.broadcast(conditionLock);
+		
 		}
 
 		while (femaleReady == false || maleReady == false) {
 			coupleReady.wait(conditionLock);
 		}
-
-		matchMakerReady = false;
+		
+		
 		maleReady = false;
 		femaleReady = false;
+		matchMakerReady = false;
+		
 		conditionLock.release();
+		
 		// matchMakerLock.release();
-		System.out.println("Matting" + whaleNames[0] + " " + whaleNames[1]);
-		Debug.printf('x', "%s and %s are mating!\n", whaleNames);
+	
+		Debug.printf('x', "%s and %s are mating!\n", whaleNames[0], whaleNames[1]);
 		Debug.println('e', "Matchmaker() END");
 	}
 
@@ -181,6 +193,7 @@ public class Whale implements Runnable {
 			// there will be one whale less
 			if (maleReady == true && femaleReady == true) {
 				Matchmaker();
+				
 			} else if (isMale) {
 				Male(name);
 			} else {
