@@ -6,6 +6,7 @@ public class CannibalMissionary {
 	public static int available_seats = 3;
 	public static NachosThread[] cannibalThreads;
 	public static NachosThread[] missionaryThreads;
+	public int cannibalNo = 0, missionaryNo = 0;
 
 	public static Lock lock = new Lock("boat");
 	public static Condition boat_load = new Condition("boat load");
@@ -32,8 +33,8 @@ public class CannibalMissionary {
 		}
 		System.out.println(sum);
 		// Already one cannibal on the boat, so we cannot have the second
-		// one
-		if (sum == 0 && available_seats == 1) {
+		// one or we have a cannibal on the boat and one remaining on the shore
+		if ((sum == 0 && available_seats == 1) || (sum == -1 && cannibalNo == 1)){
 			Debug.printf('+', "Cannibal %s has no place!\n", name);
 			boat_load.wait(lock);
 
@@ -42,6 +43,7 @@ public class CannibalMissionary {
 		// Put cannibal in boat
 		boat[available_seats - 1] = -1;
 		identities[available_seats - 1] = name;
+		cannibalNo--;
 		Debug.printf('+', "Cannibal %s loaded in the boat on seat %d\n", name,
 				new Long(available_seats - 1));
 		available_seats--;
@@ -123,6 +125,9 @@ public class CannibalMissionary {
 	}
 
 	public void init(int noOfCannibals, int noOfMissionaries) {
+		
+		cannibalNo = noOfCannibals;
+		missionaryNo = noOfMissionaries;
 		cannibalThreads = new NachosThread[noOfCannibals];
 		missionaryThreads = new NachosThread[noOfMissionaries];
 
