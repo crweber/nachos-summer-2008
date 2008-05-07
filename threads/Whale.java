@@ -18,28 +18,28 @@ import java.math.MathContext;
  */
 public class Whale implements Runnable {
 
+    // initial population (for matchmaker naming purposes)
+    private int initialFemales;
+    private int initialMales;
+    
 	// number of females and males available
 	private int numFemales;
-
 	private int numMales;
+    
+    // mate counter
+    private int mateNumber = 0;
 
-	// is there a female/male/matchmaker ready?
+	// is there a female/male ready?
 	private boolean femaleReady;
-
 	private boolean maleReady;
-
-	private boolean matchMakerReady;
 
 	// is there a pair already?
 	private Condition coupleReady = new Condition("CoupleReady");
 
 	// only one male/female thread should execute certains part of the code
 	private Lock maleLock = new Lock("MaleLock");
-
 	private Lock femaleLock = new Lock("FemaleLock");
-
 	private Lock matchMakerLock = new Lock("MatchmakerLock");
-
 	private Lock conditionLock = new Lock("ConditionLock");
 
 	// names of the whales that are mating right now
@@ -55,14 +55,17 @@ public class Whale implements Runnable {
 	public Whale(int numMales, int numFemales) {
 		Debug.ASSERT(numMales >= 0 && numFemales >= 0,
 				"Number of males and females cannot be negative.");
-
-		this.numFemales = numFemales;
-		this.numMales = numMales;
+        
+		Debug.printf('x', "Will run Whales with %d males and %d females\n", new Long(numMales), new Long(numFemales));
+        
+        // initialize variables
+		this.numFemales = this.initialFemales = numFemales;
+		this.numMales = this.initialMales = numMales;
 
 	} // ctor
 
 	public void run() {
-		// create male, female and matchmaker threads
+		// create male and female threads
 		for (int i = 0; i < numMales; i++) {
 			NachosThread maleThread = new NachosThread("MaleThread " + i);
 			maleThread.fork(new WhaleThread(true, "Male #" + i));
@@ -76,89 +79,88 @@ public class Whale implements Runnable {
 	} // run
 
 	private void Male(String name) {
+        // no need to acquire lock, it has been gotten for us
+        // need to decrement the number of whales of our gender and make sure
+        // our gender is 'ready' and to signal the other gender, in case
+        // it's listening
 		Debug.println('e', "Male() BEGIN");
 		numMales--;
 		maleReady = true;
 		whaleNames[0] = name;
-		conditionLock.acquire();
-		coupleReady.broadcast(conditionLock);
-
+		
+        conditionLock.acquire();
+		coupleReady.signal(conditionLock);
 		while (femaleReady == false) {
 			// wait until someone signals us
 			coupleReady.wait(conditionLock);
 
 		} // while
-
-		// tell the other whale we're ready
-		// coupleReady.broadcast(conditionLock);
-
-		while (matchMakerReady == false) {
-			coupleReady.wait(conditionLock);
-		}
-		
-		conditionLock.release();
-
+        conditionLock.release();
+        
+        // if here, it means that there's a male and there's a female!
+        // let's find another whale
+        Matchmaker();
+        
 		Debug.println('e', "Male() END");
-		NachosThread.thisThread().finish();
 	}
 
 	private void Female(String name) {
+        // no need to acquire lock, it has been gotten for us
+        // need to decrement the number of whales of our gender and make sure
+        // our gender is 'ready' and to signal the other gender, in case
+        // it's listening
 		Debug.println('e', "Female() BEGIN");
 		numFemales--;
 		femaleReady = true;
 		whaleNames[1] = name;
+        
 		conditionLock.acquire();
-		coupleReady.broadcast(conditionLock);
-
+		coupleReady.signal(conditionLock);
 		while (maleReady == false) {
 			// wait until someone signals us
 			coupleReady.wait(conditionLock);
 
 		} // while
+        conditionLock.release();
+        
+        // if here, it means that there's a male and there's a female!
+        // let's find another whale
+        Matchmaker();
 
-		// tell the other whale we're ready
-		// coupleReady.broadcast(conditionLock);
-		Debug.println('e', "Female() waiting for Matchmaker");
-		while (matchMakerReady == false) {
-			coupleReady.wait(conditionLock);
-		}
-	
-		
-		conditionLock.release();
-
-		Debug.println('e', "Female() END");
-		NachosThread.thisThread().finish();
+        Debug.println('e', "Female() END");
 	}
 
 	private void Matchmaker() {
-		Debug.println('e', "Matchmaker() BEGIN");
+        // make sure only one whale is here
+        matchMakerLock.acquire();
+        // now, make sure that we still have males and females, and they are ready!
+		if ((numMales > 0 || numFemales > 0) && femaleReady && maleReady) {
+            Debug.println('e', "Matchmaker() BEGIN");
+            
+            // nifty trick to get the matchmaker name!
+            String matchmakerName = "";
+            if (numMales > 0) {
+                matchmakerName = "Male #" + (initialMales - numMales);
+            } else {
+                matchmakerName = "Female #" + (initialFemales - numFemales);
+            }
+            
+            // mate
+		    Debug.printf(
+                    'x', 
+                    "Match #%d - %s and %s are mating with the help of %s!\n", 
+                    new Object[] {new Long(++mateNumber), whaleNames[0], whaleNames[1], matchmakerName});
 
-		// matchMakerLock.acquire();
-		conditionLock.acquire();
-
-		// matchmaker just makes sure that there's enough numbers...
-		if ((numFemales + numMales) > 0) {
-			Debug.println('e', "Matchmaker() broadcast");
-			matchMakerReady = true;
-			coupleReady.broadcast(conditionLock);
-		
-		}
-
-		while (femaleReady == false || maleReady == false) {
-			coupleReady.wait(conditionLock);
-		}
-		
-		
-		maleReady = false;
-		femaleReady = false;
-		matchMakerReady = false;
-		
-		conditionLock.release();
-		
-		// matchMakerLock.release();
-	
-		Debug.printf('x', "%s and %s are mating!\n", whaleNames[0], whaleNames[1]);
-		Debug.println('e', "Matchmaker() END");
+            // info message
+            Debug.printf('x', "%d males and %d females remaining\n", new Long(numMales), new Long(numFemales));
+            
+            // consider the matching done
+            femaleReady = false;
+            maleReady = false;
+            
+            Debug.println('e', "Matchmaker() END");
+        }
+        matchMakerLock.release();
 	}
 
 	class WhaleThread implements Runnable {
@@ -182,28 +184,20 @@ public class Whale implements Runnable {
 
 		public void run() {
 			// acquire the lock we need
-			if (maleReady == true && femaleReady == true) {
-				matchMakerLock.acquire();
-			} else if (isMale) {
+			if (isMale) {
 				maleLock.acquire();
 			} else {
 				femaleLock.acquire();
 			}
 
-			// there will be one whale less
-			if (maleReady == true && femaleReady == true) {
-				Matchmaker();
-				
-			} else if (isMale) {
+			if (isMale) {
 				Male(name);
 			} else {
 				Female(name);
 			}
-
-			// release the lock we got
-			if (matchMakerLock.isHeldByCurrentThread()) {
-				matchMakerLock.release();
-			} else if (isMale) {
+            
+            // release locks
+			if (isMale) {
 				maleLock.release();
 			} else {
 				femaleLock.release();
