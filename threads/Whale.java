@@ -1,5 +1,3 @@
-import java.math.MathContext;
-
 /**
  * You have been hired by Greenpeace to help the environment. Because of the
  * declining whale population, whales are having synchronization problems in
