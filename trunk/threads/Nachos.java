@@ -47,6 +47,8 @@
 // reserved.  See the COPYRIGHT file for copyright notice and
 // limitation of liability and disclaimer of warranty provisions.
 
+import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.util.*;
 
 // The Nachos kernel object
@@ -54,6 +56,9 @@ import java.util.*;
 class Nachos implements Runnable {
 
 	private static final String copyright = "Copyright (c) 1992-1993 The Regents of the University of California.  Copyright (c) 1998-1999 Rice University. All rights reserved.";
+    
+    // process id
+    private static int P_ID = 1;
 
 	// constants that control the Nachos configuration
 
@@ -67,17 +72,29 @@ class Nachos implements Runnable {
 	// system call codes -- used by the stubs to tell the kernel
 	// which system call is being asked for
 
+    // stop the machine
 	public static final byte SC_Halt = 0;
+    // a process just finishes
 	public static final byte SC_Exit = 1;
+    // start a new process
 	public static final byte SC_Exec = 2;
+    // ?????
 	public static final byte SC_Join = 3;
+    // creates a new file
 	public static final byte SC_Create = 4;
+    // opens a file
 	public static final byte SC_Open = 5;
+    // reads a file
 	public static final byte SC_Read = 6;
+    // write to a file
 	public static final byte SC_Write = 7;
+    // close a file
 	public static final byte SC_Close = 8;
+    // fork thread
 	public static final byte SC_Fork = 9;
+    // yield thread
 	public static final byte SC_Yield = 10;
+    // delete a file?
 	public static final byte SC_Remove = 11;
 
 	public static Statistics stats;
@@ -145,7 +162,11 @@ class Nachos implements Runnable {
 
 		if (randomYield) { // start the timer (if needed)
 			timer = new Timer(new TimerInterruptHandler(), randomYield);
-		}
+		} else {
+            // if not random, we still need a timer
+		    timer = new Timer(new TimerInterruptHandler(), false, false);
+        }
+        
 
 		if (FILESYS)
 			synchDisk = new SynchDisk("DISK");
@@ -324,6 +345,10 @@ class Nachos implements Runnable {
 				System.arraycopy(Machine.mainMemory, ptr, buf, 0, len);
 				Write(buf, len, Machine.readRegister(6));
 				break;
+                
+            case SC_Create:
+                
+                break;
 			}
 
 			Machine.registers[Machine.PrevPCReg] = Machine.registers[Machine.PCReg];
@@ -390,7 +415,34 @@ class Nachos implements Runnable {
 	 * address space identifier
 	 */
 	public static int Exec(String name) {
-		return 0;
+        RandomAccessFile executable;
+        AddrSpace space;
+        
+        int newId = P_ID++;
+        
+        try {
+          executable = new RandomAccessFile(name, "r");
+        }
+        catch (IOException e) {
+          Debug.println('+', "Unable to open executable file: " + name);
+          return -1;
+        }
+
+        try {
+          space = new AddrSpace(executable);
+        }
+        catch (IOException e) {
+          Debug.println('+', "Unable to read executable file: " + name);
+          return -1;
+        }
+
+
+        NachosThread.thisThread().setSpace(space);
+
+        space.initRegisters();      // set the initial register values
+        space.restoreState();       // load page table register
+        
+		return newId;
 	}
 
 	/*
