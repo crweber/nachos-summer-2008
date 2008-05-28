@@ -11,9 +11,18 @@
  * This class relies heavily on BitMap in order to control which frames are free/used.
  */
 public class MemoryManagement {
+
+    // enforce only one instance of this class via a singleton
+    public static final MemoryManagement instance = new MemoryManagement();
     
     // we need a bitmap
-    private BitMap physicalMemory = new BitMap(Machine.MemorySize);
+    private BitMap physicalMemory;
+    
+    // not really used, but by making this private and having only one static instance, we
+    // enforce the singleton design pattern
+    private MemoryManagement() {
+        physicalMemory = new BitMap(Machine.MemorySize);
+    }
     
     /**
      * Determines whether the system (bitmap) has enough free pages.
@@ -30,10 +39,31 @@ public class MemoryManagement {
     /**
      * Allocates a page.
      * 
-     * @return the physical page number that has just been allocated.
+     * @return the physical page number that has just been allocated, or -1 if no page could be allocated.
      */
     public int allocatePage() {
-        return 0;
+        // we are the only ones allocating pages, so we know for sure that, if the first bit of a page is not available
+        // then PageSize bits (inclusive) won't be available at all
+        int firstBit = physicalMemory.find();
+        
+        // not enough memory!
+        if (firstBit == -1) {
+            Debug.println('x', "[MemoryManagement.allocatePage] Could not find enough memory.");
+            return -1;
+        }
+        
+        // just be extra paranoid and check that this firstBit actually matches the first bit of a page
+        Debug.ASSERT(firstBit % Machine.PageSize == 0, "[MemoryManagement.allocatePage] first bit available doesnt seem to be the first on page!");
+
+        // just set all of the bits for this page
+        for (int i = (firstBit + 1); i < (firstBit + Machine.PageSize); i++) {
+            physicalMemory.mark(i);
+        }
+        
+        Debug.printf('x', "[MemoryManagement.allocatePage] Allocated page %d\n", new Integer(firstBit / Machine.PageSize));
+        
+        // return the page number
+        return (firstBit / Machine.PageSize);
     }
     
     /**
@@ -42,7 +72,16 @@ public class MemoryManagement {
      * @param pageNumber physical page number to deallocate.
      */
     public void deallocatePage(int pageNumber) {
+        // indices
+        int firstBit = pageNumber * Machine.PageSize;
+        int lastBit = pageNumber * (Machine.PageSize + 1);
         
+        // deallocate bit by bit
+        for (int i = firstBit; i < lastBit; i++) {
+            physicalMemory.clear(i);
+        }
+        
+        Debug.printf('x', "[MemoryManagement.deallocatePage] Deallocating page %d\n", new Integer(pageNumber));
     }
     
     

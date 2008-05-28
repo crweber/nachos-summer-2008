@@ -34,6 +34,16 @@ class NachosThread extends Thread implements Printable {
   // while executing kernel code.
 
   int userRegisters[];	// user-level CPU register state
+  
+  // instrumentation information
+  // ticks when this thread was created
+  private int ticksAtCreation = -1;
+  // ticks when this thread finished
+  private int ticksAtExit;
+  // ticks on cpu since this thread was last scheduled
+  private int ticksSinceLastScheduled;
+  // total cpu ticks this thread has gotten
+  private int cpuTicks;
 
 
   public static NachosThread thisThread() {
@@ -46,6 +56,42 @@ class NachosThread extends Thread implements Printable {
 
   public int getStatus() { 
     return status;
+  }
+  
+  public void setTicksAtCreation(int ticksAtCreation) {
+      // make sure we set this only once
+      if (this.ticksAtCreation == -1) {
+          this.ticksAtCreation = ticksAtCreation;
+      }
+  }
+  
+  public int getTicksAtCreation() {
+      return this.ticksAtCreation;
+  }
+  
+  public void setTicksAtExit(int ticksAtExit) {
+      this.ticksAtExit = ticksAtExit;
+  }
+  
+  public int getTicksAtExit() {
+      return this.ticksAtExit;
+  }
+  
+  public void setTicksSinceLastScheduled(int ticksSinceLastScheduled) {
+      this.ticksSinceLastScheduled = ticksSinceLastScheduled;
+  }
+  
+  public int getTicksSinceLastScheduled() {
+      return this.ticksSinceLastScheduled;
+  }
+  
+  // increments the active cpu ticks this thread has gotten
+  public void incrementCpuTicks(int ticks) {
+      this.cpuTicks += ticks;
+  }
+  
+  public int getCpuTicks() {
+      return this.cpuTicks;
   }
 
   //----------------------------------------------------------------------
@@ -117,10 +163,21 @@ class NachosThread extends Thread implements Printable {
 
     Debug.print('t', "Finishing thread: " + getName() +"\n");
 
+    // record the time
+    setTicksAtExit(Nachos.stats.totalTicks);
+    
+    // store instrumentation info
+    ThreadInstrumentation.addElement(this);
+    
+    // dump this thread's info
+    ThreadInstrumentation.printThreadInfo(this);
+    
     Scheduler.threadToBeDestroyed = thisThread();
     sleep();				
     // not reached
   }
+  
+  
 
 
   //----------------------------------------------------------------------

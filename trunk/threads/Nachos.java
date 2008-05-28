@@ -163,7 +163,7 @@ class Nachos implements Runnable {
 		if (randomYield) { // start the timer (if needed)
 			timer = new Timer(new TimerInterruptHandler(), randomYield);
 		} else {
-            // if not random, we still need a timer
+            // if not random, we still need a timer to implement time slicing
 		    timer = new Timer(new TimerInterruptHandler(), false, false);
         }
         

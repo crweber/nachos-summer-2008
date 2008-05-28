@@ -78,6 +78,11 @@ class Scheduler {
 		"\n");
 
     thread.setStatus(NachosThread.READY);
+    
+    // the thread has been put on the ready list... set the creation time
+    // this method will ensure to set the creation time only once
+    thread.setTicksAtCreation(Nachos.stats.totalTicks);
+    
     readyList.append(thread);
   }
   
@@ -127,11 +132,19 @@ class Scheduler {
 
     synchronized (nextThread) {
       nextThread.setStatus(NachosThread.RUNNING);
+      
+      // the nextThread is about to be run, record this time
+      nextThread.setTicksSinceLastScheduled(Nachos.stats.totalTicks);
+      
       nextThread.notify();
     }
     synchronized (oldThread) {
-      while (oldThread.getStatus() != NachosThread.RUNNING) 
-	try {oldThread.wait();} catch (InterruptedException e) {};
+        // we are about to stop the old thread... record this time
+        oldThread.incrementCpuTicks(Nachos.stats.totalTicks - oldThread.getTicksSinceLastScheduled());
+        
+        while (oldThread.getStatus() != NachosThread.RUNNING) { 
+            try {oldThread.wait();} catch (InterruptedException e) {};
+        }
     }
     
     Debug.println('t', "Now in thread: " + NachosThread.thisThread().getName());
