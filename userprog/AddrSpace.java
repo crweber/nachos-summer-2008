@@ -17,14 +17,21 @@
 // limitation of liability and disclaimer of warranty provisions.
 
 import java.io.*;
+import java.util.Hashtable;
+import java.util.Map;
+
 
 class AddrSpace {
 
   static final int UserStackSize = 1024; // increase this as necessary!
+  static final int MaxOpenFiles = 30;
+  
 
   TranslationEntry pageTable[];
   int numPages;
-
+  Map openFiles;
+  int nextID = 2;
+  
   //----------------------------------------------------------------------
   // 	Create an address space to run a user program.
   //	Load the program from a file "executable", and set everything
@@ -93,6 +100,10 @@ class AddrSpace {
       executable.read(Machine.mainMemory, (int)noffH.code.virtualAddr, 
 		      (int)noffH.code.size);
     }
+    
+    //initialize structures for open files
+    openFiles = new Hashtable();
+    nextID = 2;
 
     if (noffH.initData.size > 0) {
       Debug.println('a', "Initializing data segment, at " +
@@ -161,5 +172,182 @@ class AddrSpace {
     Machine.pageTable = pageTable;
     Machine.pageTableSize = numPages;
   }
+  
+
+	/**
+	 * Read string from user space
+	 * 
+	 * @param vaddr
+	 * @param buffer
+	 * @return size of read string
+	 */
+
+	int UserSpaceStringToKernel(int vaddr, char[] buffer) {
+		int length = 0;
+		int car = 0;
+		int retVal = 0;
+
+		Debug
+				.printf(
+						'+',
+						"Reading user string to kernel, starting virtual address: %s\n",
+						vaddr);
+		// read until null character
+		while (length < Nachos.MaxStringSize) {
+			try {
+				car = Machine.readMem(vaddr, 1);
+			} catch (MachineException e) {
+				// Ups! Machine translation failed!
+				e.printStackTrace();
+			}
+
+			buffer[length] = (char) car;
+			vaddr++;
+			length++;
+			// null terminated string
+			if ('\0' == car) {
+				break;
+			}
+
+		}
+
+		if (length >= Nachos.MaxStringSize) {
+			retVal = -1;
+		} else {
+			retVal = length;
+		}
+		return retVal;
+	}
+
+	/**
+	 * Read data from kernel and write in address space
+	 * 
+	 * @param vaddr
+	 * @param length
+	 * @param buf
+	 * @return size of written buffer
+	 */
+	int KernelSpaceToUserBuffer(int vaddr, int length, byte[] buf) {
+		int i;
+
+		Debug
+				.printf(
+						'+',
+						"Writing buffer to user address space, starting virtual address %d, length %d bytes",
+						vaddr, length);
+		for (i = 0; i < length; i++) {
+
+			if (Machine.writeMem(vaddr, 1, buf[i]) == false) {
+				return -1;
+			}
+
+			vaddr++;
+
+		}
+		return length;
+	}
+	
+
+	/**
+	 * 
+	 * @param vaddr
+	 * @param length
+	 * @param buf
+	 * @return length of buffer written
+	 */
+	int UserBufToKernelSpace(int vaddr, int length, byte[] buf) {
+		int car = -1;
+		int i;
+
+		Debug
+				.printf(
+						'+',
+						"Reading buffer from user address space, starting virtual address %d, length %d bytes",
+						vaddr, length);
+		for (i = 0; i < length; i++) {
+			try {
+				car = Machine.readMem(vaddr, 1);
+			} catch (MachineException e) {
+				// Ups! Machine translation failed!
+				e.printStackTrace();
+			}
+			buf[i] = (byte) car;
+			vaddr++;
+
+		}
+		return length;
+	}
+
+
+
+/**
+ * Add a new file to the list of opened files and return an ID
+ */
+int generateOpenFileId(OpenFileStub file)
+{
+        
+    // insert file to open file's table and return ID
+    
+  
+    if (nextID == MaxOpenFiles)
+    {
+       	Debug.println('+', "Open file table is full");
+        return -1;
+    }
+    else
+    {
+            Debug.ASSERT(nextID < MaxOpenFiles);
+            openFiles.put(new Integer(nextID), file);
+            Debug.printf('+', "Adding to open table of files, file: %s", nextID);  
+            nextID++;
+                                      
+    }
+    return nextID;
+}
+
+
+/**
+ * 
+ * @param fileId
+ * @return the removed file
+ */
+OpenFileStub deleteOpenFile(int fileId)
+{
+	OpenFileStub tmp = null;
+    
+    //check that the fileId is valid
+    if (fileId < 2 || fileId >= MaxOpenFiles)
+    {
+          Debug.println('+', "Invalid file id");
+          
+    }
+    else
+    {
+            tmp = (OpenFileStub)openFiles.get(new Integer(fileId));
+            openFiles.remove(new Integer(fileId));
+    }
+    return tmp;
+}
+
+/**
+ * 
+ */
+OpenFileStub getOpenFile(int fileId)
+{
+    OpenFileStub file = null;
+    
+    if (fileId < 2 || fileId >= MaxOpenFiles)
+    {
+    	Debug.println('+', "Invalid file id");
+    }
+    else
+    {
+            file = (OpenFileStub)openFiles.get(new Integer(fileId));
+    }
+    return file;
+}
+
+
+
 
 }
