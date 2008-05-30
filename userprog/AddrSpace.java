@@ -273,37 +273,38 @@ class AddrSpace {
 	 * @return size of read string
 	 */
 
-	int UserSpaceStringToKernel(int vaddr, char[] buffer) {
+	String UserSpaceStringToKernel(int vaddr) {
+        StringBuffer strBuffer = new StringBuffer();
 		int length = 0;
 		int car = 0;
-		int retVal = 0;
 
 		Debug.printf('+', "Reading user string to kernel, starting virtual address: %s\n", ("" + vaddr));
-		// read until null character
-		while (length < Nachos.MaxStringSize) {
-			try {
-				car = Machine.readMem(vaddr, 1);
-			} catch (MachineException e) {
-				// Ups! Machine translation failed!
-				e.printStackTrace();
-			}
-
-			buffer[length] = (char) car;
-			vaddr++;
-			length++;
-			// null terminated string
-			if ('\0' == car) {
-				break;
-			}
-
-		}
+        
+        try {
+            // read the first byte
+            car = Machine.readMem(vaddr, 1);
+        
+    		// read until null character
+    		while (length < Nachos.MaxStringSize && car != '\0') {
+                // append to our buffer
+                strBuffer.append((char)car);
+    			vaddr++;
+    			length++;
+                car = Machine.readMem(vaddr, 1);
+    
+    		}
+        }
+        catch (MachineException e) {
+            // Ups! Machine translation failed!
+            e.printStackTrace();
+        }
 
 		if (length >= Nachos.MaxStringSize) {
-			retVal = -1;
-		} else {
-			retVal = length;
-		}
-		return retVal;
+			// we should not have read anything at all, it went over the limit!
+            return "";
+		} 
+
+		return strBuffer.toString();
 	}
 
 	/**
@@ -379,9 +380,10 @@ int generateOpenFileId(OpenFileStub file)
     else
     {
             Debug.ASSERT(nextID < MaxOpenFiles);
+            nextID++;
             openFiles.put(new Integer(nextID), file);
             Debug.printf('+', "Adding to open table of files, file: %s", ("" + nextID));  
-            nextID++;
+            
                                       
     }
     return nextID;

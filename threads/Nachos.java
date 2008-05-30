@@ -343,7 +343,8 @@ class Nachos implements Runnable {
 				break;
 			case SC_Exec:
                 // pointer to the name of the file to execute
-				int newProcessId = Exec(readString(Machine.readRegister(4)));
+                String execName = NachosThread.thisThread().space.UserSpaceStringToKernel(Machine.readRegister(4));
+				int newProcessId = Exec(execName);
                 Machine.writeRegister(2, newProcessId);
 				break;
             case SC_Join:
@@ -353,26 +354,38 @@ class Nachos implements Runnable {
 			case SC_Write:
 				
 				Debug.println('+', "Write initiated by user");
-				int fileIdWrite = Machine.readRegister(4);
-				int vaddrWrite = Machine.readRegister(5);
-				int sizeWrite = Machine.readRegister(6);
+                // first parameter, vaddr of the buffer to write from
+                int vaddrWrite = Machine.readRegister(4);
+                // how many bytes we want to write
+                int sizeWrite = Machine.readRegister(5);
+                // file descriptor
+				int fileIdWrite = Machine.readRegister(6);
+				
 				byte[] bufferWrite = new byte[sizeWrite + 1];
 				
-				//write data from buffer
-				int retValWrite = Write(bufferWrite, sizeWrite, fileIdWrite);
 				// write data from user to kernel address space
                 if (NachosThread.thisThread().space.UserBufToKernelSpace(vaddrWrite, sizeWrite, bufferWrite) == -1)
                 {
                         Debug.println('+', "Could not copy data from user address space");
-                        
                 }
+                
+                //write data from buffer
+                int retValWrite = Write(bufferWrite, sizeWrite, fileIdWrite);
+                
+                // write result
+                Machine.writeRegister(2, retValWrite);
+                
 				break;
 			case SC_Read:
 				
 				Debug.println('+', "Read initiated by user");
-				int fileIdRead = Machine.readRegister(4);
-				int vaddrRead = Machine.readRegister(5);
-				int sizeRead = Machine.readRegister(6);
+                // first parameter, vaddr of the buffer to write from
+                int vaddrRead = Machine.readRegister(4);
+                // how many bytes we want to write
+                int sizeRead = Machine.readRegister(5);
+                // file descriptor
+                int fileIdRead = Machine.readRegister(6);
+                
 				byte[] bufferRead = new byte[sizeRead + 1];
 				
 				//read data into buffer
@@ -383,6 +396,10 @@ class Nachos implements Runnable {
                         Debug.println('+', "Could not copy data to user address space");
                         
                 }
+                
+                // write result
+                Machine.writeRegister(2, retValRead);
+                
 				break;
                 
             case SC_Create:
@@ -390,16 +407,20 @@ class Nachos implements Runnable {
 				Debug.println('+', "Create initiated by user");
 				// read address from first argument
 				int vaddr = Machine.readRegister(4);
-				char[] buffer = new char[Nachos.MaxStringSize];
 
 				// read the name into buffer
-				int size = NachosThread.thisThread().space
-						.UserSpaceStringToKernel(vaddr, buffer);
+				String fileCreate = NachosThread.thisThread().space.UserSpaceStringToKernel(vaddr);
 
+                // return value
+                int createRetValue = 0;
+                
 				// create the file
-				if (size != -1) {
-					Create(new String(buffer));
+				if (fileCreate.length() != 0) {
+                    createRetValue = Create(fileCreate) ? 1 : 0;
 				}
+                
+                // write it
+                Machine.writeRegister(2, createRetValue);
 
 				break;
 			case SC_Open:
@@ -407,16 +428,20 @@ class Nachos implements Runnable {
 				Debug.println('+', "Open initiated by user");
 				// read address from first argument
 				int vaddrOpen = Machine.readRegister(4);
-				char[] bufferOpen = new char[Nachos.MaxStringSize];
 
 				// read the name into buffer
-				int sizeOpen = NachosThread.thisThread().space
-						.UserSpaceStringToKernel(vaddrOpen, bufferOpen);
+				String fileOpen = NachosThread.thisThread().space.UserSpaceStringToKernel(vaddrOpen);
+                
+                // return value for Open
+                int openRetValue = -1;
 
 				// open the file
-				if (sizeOpen != -1) {
-					Open(new String(bufferOpen));
+				if (fileOpen.length() != 0) {
+					openRetValue = Open(fileOpen);
 				}
+                
+                // write it to register
+                Machine.writeRegister(2, openRetValue);
 
 				break;
 			case SC_Remove:
@@ -424,16 +449,21 @@ class Nachos implements Runnable {
 				Debug.println('+', "Remove initiated by user");
 				// read address from first argument
 				int vaddrRemove = Machine.readRegister(4);
-				char[] bufferRemove = new char[Nachos.MaxStringSize];
 
 				// read the name into buffer
-				int sizeRemove = NachosThread.thisThread().space
-						.UserSpaceStringToKernel(vaddrRemove, bufferRemove);
+				String fileRemove = NachosThread.thisThread().space.UserSpaceStringToKernel(vaddrRemove);
 
+                // return value for Remove
+                int removeRetVal = 0;
+                
 				// remove the file
-				if (sizeRemove != -1) {
-					Remove(new String(bufferRemove));
+				if (fileRemove.length() != 0) {
+					removeRetVal = Remove(fileRemove) ? 1 : 0;
 				}
+                
+                // write it
+                Machine.writeRegister(2, removeRetVal);
+                
 				break;
 				
 			case SC_Close:
@@ -464,24 +494,6 @@ class Nachos implements Runnable {
 		Debug.ASSERT(false);
 
 	}
-    
-    // reads a string from memory, starting on the address given by ptr
-    public static String readString(int ptr) {
-        StringBuffer strBuffer = new StringBuffer();
-        
-        try {
-            int lastByte = Machine.readMem(ptr++, 1);
-            while (lastByte != 0) {
-                strBuffer.append((char)lastByte);
-                lastByte = Machine.readMem(ptr++, 1);
-            }
-        }
-        catch (MachineException e) {
-            Machine.raiseException(e.exception, ptr);
-        }
-        
-        return strBuffer.toString();
-    }
 
 	// ----------------------------------------------------------------------
 	// main
@@ -686,20 +698,21 @@ class Nachos implements Runnable {
 	public static boolean Create(String name) {
 		
 		if (name != null) {
-			kernelFileSystem.create(name, 0);
-			return true;
+			return kernelFileSystem.create(name, 0);
+			
 		}
 		return false;
 	}
 
 	/* Remove a Nachos file, with "name" */
-	public static boolean Remove(String name) {
-		if (name != null) {
-			kernelFileSystem.remove(name);
-			return true;
-		}
-		return false;
-	}
+    public static boolean Remove(String name) {
+        if (name != null) {
+            return kernelFileSystem.remove(name);
+
+        }
+
+        return false;
+    }
 
 	/*
 	 * Open the Nachos file "name", and return an "OpenFileId" that can be used
@@ -733,7 +746,7 @@ class Nachos implements Runnable {
 		// get file from open file table
 		int retVal;
 		
-		Debug.ASSERT(id !=0 && id != 1);
+		//Debug.ASSERT(id !=0 && id != 1);
 		OpenFileStub file = NachosThread.thisThread().space.getOpenFile(id);
         if (file == null)
         {
@@ -746,7 +759,7 @@ class Nachos implements Runnable {
                 retVal = file.write(buffer, 0, size);
                              
                 //check for correct values
-                Debug.printf('+', "Written buffer: %s ", buffer);
+                Debug.printf('+', "Written buffer: %s ", new String(buffer));
                 Debug.ASSERT(retVal >=0 && retVal <= size);
                 
                 
@@ -780,7 +793,7 @@ class Nachos implements Runnable {
                 buffer[retVal] = '\0';
                 
                 //check for correct values
-                Debug.printf('+', "Readed buffer: %s ", buffer);
+                Debug.printf('+', "Read buffer: %s ", new String(buffer));
                 Debug.ASSERT(retVal >=0 && retVal <= size);
                 
                 
