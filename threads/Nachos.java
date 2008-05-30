@@ -746,8 +746,21 @@ class Nachos implements Runnable {
 		// get file from open file table
 		int retVal;
 		
-		//Debug.ASSERT(id !=0 && id != 1);
-		OpenFileStub file = NachosThread.thisThread().space.getOpenFile(id);
+		//we cannot write to the input
+        if (id == Nachos.ConsoleInput){
+		    return -1;
+        }
+        
+        //if we write to the console, we just use Java print
+        if (id == Nachos.ConsoleOutput){
+            for (int i = 0; i < size; i++){
+                System.out.print((char)buffer[i]);
+            }
+            return size;
+        }
+		
+        //id is greater than 1
+        OpenFileStub file = NachosThread.thisThread().space.getOpenFile(id);
         if (file == null)
         {
                 Debug.println('+', "File not found");
@@ -779,7 +792,26 @@ class Nachos implements Runnable {
 		// get file from open file table
 		int retVal;
 		
-		Debug.ASSERT(id !=0 && id != 1);
+        //we cannot read from the output
+        if (id == Nachos.ConsoleOutput){
+            return -1;
+        }
+        
+        //if we read from the console, we just use Java standard
+        if (id == Nachos.ConsoleInput){
+            for (int i = 0; i < size; i++){
+                try {
+                    buffer[i] = (byte)System.in.read();
+                } catch (IOException e) {
+                    
+                    e.printStackTrace();
+                }
+            }
+            
+            return size;
+        }
+
+        //id is greater than 1
 		OpenFileStub file = NachosThread.thisThread().space.getOpenFile(id);
         if (file == null)
         {
