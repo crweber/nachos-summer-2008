@@ -47,6 +47,7 @@
 // reserved.  See the COPYRIGHT file for copyright notice and
 // limitation of liability and disclaimer of warranty provisions.
 
+import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.*;
@@ -336,7 +337,9 @@ class Nachos implements Runnable {
 				Exit(Machine.readRegister(4));
 				break;
 			case SC_Exec:
-				Exec("");
+                // pointer to the name of the file to execute
+				int newProcessId = Exec(readString(Machine.readRegister(4)));
+                Machine.writeRegister(2, newProcessId);
 				break;
 			case SC_Write:
 				
@@ -386,7 +389,7 @@ class Nachos implements Runnable {
 
 				// create the file
 				if (size != -1) {
-					Create(buffer.toString());
+					Create(new String(buffer));
 				}
 
 				break;
@@ -403,7 +406,7 @@ class Nachos implements Runnable {
 
 				// open the file
 				if (sizeOpen != -1) {
-					Open(bufferOpen.toString());
+					Open(new String(bufferOpen));
 				}
 
 				break;
@@ -420,7 +423,7 @@ class Nachos implements Runnable {
 
 				// remove the file
 				if (sizeRemove != -1) {
-					Remove(bufferRemove.toString());
+					Remove(new String(bufferRemove));
 				}
 				break;
 				
@@ -434,10 +437,17 @@ class Nachos implements Runnable {
 				
 				break;
 			}
-
-			Machine.registers[Machine.PrevPCReg] = Machine.registers[Machine.PCReg];
-			Machine.registers[Machine.PCReg] = Machine.registers[Machine.NextPCReg];
-			Machine.registers[Machine.NextPCReg] += 4;
+            
+            // no need to increment if we just created a new process
+            //if (type != SC_Exec) {
+    			Machine.registers[Machine.PrevPCReg] = Machine.registers[Machine.PCReg];
+    			Machine.registers[Machine.PCReg] = Machine.registers[Machine.NextPCReg];
+    			Machine.registers[Machine.NextPCReg] += 4;
+            //}
+                
+            //if (type == SC_Exit) {
+            //    NachosThread.thisThread().Yield();
+            //}
 			return;
 		}
 
@@ -446,6 +456,24 @@ class Nachos implements Runnable {
 		Debug.ASSERT(false);
 
 	}
+    
+    // reads a string from memory, starting on the address given by ptr
+    public static String readString(int ptr) {
+        StringBuffer strBuffer = new StringBuffer();
+        
+        try {
+            int lastByte = Machine.readMem(ptr++, 1);
+            while (lastByte != 0) {
+                strBuffer.append((char)lastByte);
+                lastByte = Machine.readMem(ptr++, 1);
+            }
+        }
+        catch (MachineException e) {
+            Machine.raiseException(e.exception, ptr);
+        }
+        
+        return strBuffer.toString();
+    }
 
 	// ----------------------------------------------------------------------
 	// main
@@ -483,6 +511,11 @@ class Nachos implements Runnable {
 	/* Stop Nachos, and print out performance stats */
 	public static void Halt() {
 		Debug.print('+', "Shutdown, initiated by user program.\n");
+        NachosThread.thisThread().incrementCpuTicks(
+                Nachos.stats.totalTicks - 
+                NachosThread.thisThread().getTicksSinceLastScheduled());
+        NachosThread.thisThread().setTicksAtExit(Nachos.stats.totalTicks);
+        ThreadInstrumentation.addElement(NachosThread.thisThread());
 		Interrupt.halt();
 	}
 
@@ -499,10 +532,17 @@ class Nachos implements Runnable {
 	 * address space identifier
 	 */
 	public static int Exec(String name) {
+        /*int newId = P_ID++;
+        name = getFullExecutablePath(name, NachosThread.thisThread().getExecutableLocation());
+        NachosThread newProcess = new NachosThread(name);
+        newProcess.fork(new ProgTest(name));
+        return newId;*/
+        
         RandomAccessFile executable;
         AddrSpace space;
         
-        int newId = P_ID++;
+        // first off, we have to check if the executable is given by a full or relative path
+        name = getFullExecutablePath(name, NachosThread.thisThread().getExecutableLocation());
         
         try {
           executable = new RandomAccessFile(name, "r");
@@ -516,18 +556,54 @@ class Nachos implements Runnable {
           space = new AddrSpace(executable);
         }
         catch (IOException e) {
-          Debug.println('+', "Unable to read executable file: " + name);
-          return -1;
+            Debug.println('+', "Unable to read executable file: " + name);
+            return -1;
         }
+        catch (NachosException ne) {
+            // not enough free pages
+            Debug.printf('+', "Could not find enough pages to allocate process [%s]\n", name);
+            return -1;
+        }
+        
+        space.setExecutablePath(name);
 
-
-        NachosThread.thisThread().setSpace(space);
-
-        space.initRegisters();      // set the initial register values
-        space.restoreState();       // load page table register
+        NachosThread newProcess = new NachosThread(name);
+        newProcess.setSpace(space);
+        
+        int newId = P_ID++;
+        Debug.printf('x', "[Nachos.Exec] Scheduling process [%s] with pid [%d].\n", name, new Long(newId));
+        newProcess.fork(new ProcessThread());
         
 		return newId;
 	}
+    
+    private static class ProcessThread implements Runnable {
+        
+        public void run() {
+            Debug.printf('x', "[ProcessThread.run] Running process [%s].\n", NachosThread.thisThread().getName());
+            NachosThread.thisThread().space.initRegisters();
+            NachosThread.thisThread().space.restoreState();
+            
+            Machine.run();
+            
+            Debug.ASSERT(false);
+        }
+    }
+    
+    // given a file name, returns its full path.
+    public static String getFullExecutablePath(String execName, String invokingProcessExecName) {
+        // check first if the provided executable name is a full path already
+        if (execName.startsWith(File.separator)) {
+            return execName;
+        }
+        
+        // so, strip the file name from the invoking process executable name
+        String pathWithoutFileName = 
+            invokingProcessExecName.substring(0, invokingProcessExecName.lastIndexOf(File.separator));
+        
+        // now, just append the provided execName to the path we just got
+        return (pathWithoutFileName + File.separator + execName);
+    }
 
 	/*
 	 * Only return once the user program "id" has finished. Return the exit

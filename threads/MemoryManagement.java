@@ -74,7 +74,8 @@ public class MemoryManagement {
     public void deallocatePage(int pageNumber) {
         // indices
         int firstBit = pageNumber * Machine.PageSize;
-        int lastBit = pageNumber * (Machine.PageSize + 1);
+        // actually one bit AFTER the last one...
+        int lastBit = (pageNumber + 1) * Machine.PageSize;
         
         // deallocate bit by bit
         for (int i = firstBit; i < lastBit; i++) {
