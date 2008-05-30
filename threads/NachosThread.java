@@ -1,3 +1,6 @@
+import java.util.List;
+import java.util.ArrayList;
+
 // NachosThread.java
 //	Nachos threads class.  There are four main methods:
 //
@@ -45,10 +48,85 @@ class NachosThread extends Thread implements Printable {
   // total cpu ticks this thread has gotten
   private int cpuTicks;
   
+  // process id
+  private int spaceId;
+  // parent process
+  private NachosThread parent = null;
+  // is the parent waiting for us
+  private boolean parentJoining = false;
+  // child processes
+  private List children = new ArrayList();
+  // open files, and used resources
+  private List usedResources = new ArrayList();
+  // lock and condition used to signal other processes waiting for us
+  private Lock joinLock;
+  private Condition joinCondition;
+  
+  // our return code
+  private int returnCode = -1;
+  // return code of joined process (if any)
+  private int joinedProcessReturnCode = -1;
+  
   public static NachosThread thisThread() {
     return (NachosThread) currentThread();
   }
+  
+  public void setReturnCode(int returnCode) {
+      this.returnCode = returnCode;
+  }
+  
+  public int getReturnCode() {
+      return returnCode;
+  }
+  
+  public void setParentJoining(boolean parentJoining) {
+      this.parentJoining = parentJoining; 
+  }
+  
+  public void setJoinedProcessReturnCode(int returnCode) {
+      this.joinedProcessReturnCode = returnCode;
+  }
+  
+  public int getJoinedProcessReturnCode() {
+      return joinedProcessReturnCode;
+  }
+  
+  public Lock getJoinLock() {
+      return joinLock;
+  }
+  
+  public Condition getJoinCondition() {
+      return joinCondition;
+  }
+  
+  public void setParent(NachosThread process) {
+      this.parent = process;
+  }
+  
+  public NachosThread getParent() {
+      return parent;
+  }
+  
+  public int countChildren() {
+      return children.size();
+  }
+  
+  public void addChild(NachosThread process) {
+      this.children.add(process);
+  }
+  
+  public NachosThread getChild(int index) {
+      return (NachosThread)children.get(index);
+  }
 
+  public void setSpaceId(int spaceId) {
+      this.spaceId = spaceId;
+  }
+  
+  public int getSpaceId() {
+      return this.spaceId;
+  }
+  
   public void setStatus(int st) { 
     status = st; 
   }
@@ -109,6 +187,10 @@ class NachosThread extends Thread implements Printable {
     status = JUST_CREATED;
     // user-level CPU register state    
     userRegisters = new int[Machine.NumTotalRegs];
+    
+    // init lock and condition
+    joinLock = new Lock(threadName);
+    joinCondition = new Condition(threadName);
   }
 
   //----------------------------------------------------------------------
@@ -176,6 +258,16 @@ class NachosThread extends Thread implements Printable {
     
     // dump this thread's info
     ThreadInstrumentation.printThreadInfo(this);
+    
+    // notify if our parent is waiting for us
+    if (parentJoining && parent != null) {
+        // set also our return code into the parent
+        parent.setJoinedProcessReturnCode(getReturnCode());
+        
+        parent.joinLock.acquire();
+        parent.joinCondition.signal(parent.joinLock);
+        parent.joinLock.release();
+    }
     
     // delete the memory allocated by this thread
     if (space != null && space.pageTable != null) {

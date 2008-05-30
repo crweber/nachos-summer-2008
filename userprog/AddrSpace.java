@@ -317,7 +317,7 @@ class AddrSpace {
 	int KernelSpaceToUserBuffer(int vaddr, int length, byte[] buf) {
 		int i;
 
-		Debug.printf('+', "Writing buffer to user address space, starting virtual address %d, length %d bytes", new Integer(vaddr), new Integer(length));
+		Debug.printf('+', "Writing buffer to user address space, starting virtual address %d, length %d bytes.\n", new Integer(vaddr), new Integer(length));
 		for (i = 0; i < length; i++) {
 
 			if (Machine.writeMem(vaddr, 1, buf[i]) == false) {
@@ -344,7 +344,7 @@ class AddrSpace {
 
 		Debug.printf(
 						'+',
-						"Reading buffer from user address space, starting virtual address %d, length %d bytes",
+						"Reading buffer from user address space, starting virtual address %d, length %d bytes.\n",
 						new Integer(vaddr), new Integer(length));
 		for (i = 0; i < length; i++) {
 			try {

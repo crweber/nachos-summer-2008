@@ -105,6 +105,8 @@ class Nachos implements Runnable {
 	private static String args[];
 	public static Random random;
 	public static final int MaxStringSize = 256;
+    
+    private static final Lock exceptionHandlerLock = new Lock("ExceptionHandlerLock");
 
 	static {
 		stats = new Statistics(); // collect statistics
@@ -327,6 +329,9 @@ class Nachos implements Runnable {
 	public static void exceptionHandler(int which) {
 		int type = Machine.readRegister(2);
 
+        // we want to perform an exception handling routine in an atomic way
+        //exceptionHandlerLock.acquire();
+        
 		if (which == Machine.SyscallException) {
 
 			switch (type) {
@@ -341,6 +346,10 @@ class Nachos implements Runnable {
 				int newProcessId = Exec(readString(Machine.readRegister(4)));
                 Machine.writeRegister(2, newProcessId);
 				break;
+            case SC_Join:
+                int result = Join(Machine.readRegister(4));
+                Machine.writeRegister(2, result);
+                break;
 			case SC_Write:
 				
 				Debug.println('+', "Write initiated by user");
@@ -439,20 +448,19 @@ class Nachos implements Runnable {
 			}
             
             // no need to increment if we just created a new process
-            //if (type != SC_Exec) {
-    			Machine.registers[Machine.PrevPCReg] = Machine.registers[Machine.PCReg];
-    			Machine.registers[Machine.PCReg] = Machine.registers[Machine.NextPCReg];
-    			Machine.registers[Machine.NextPCReg] += 4;
-            //}
-                
-            //if (type == SC_Exit) {
-            //    NachosThread.thisThread().Yield();
-            //}
+        	Machine.registers[Machine.PrevPCReg] = Machine.registers[Machine.PCReg];
+			Machine.registers[Machine.PCReg] = Machine.registers[Machine.NextPCReg];
+			Machine.registers[Machine.NextPCReg] += 4;
+            
+            // release the lock
+            //exceptionHandlerLock.release();
+            
 			return;
 		}
 
 		System.out.println("Unexpected user mode exception " + which + ", "
 				+ type);
+        //exceptionHandlerLock.release();
 		Debug.ASSERT(false);
 
 	}
@@ -523,7 +531,8 @@ class Nachos implements Runnable {
 
 	/* This user program is done (status = 0 means exited normally). */
 	public static void Exit(int status) {
-		Debug.println('+', "User program exits with status=" + status);
+		Debug.printf('x', "[Nachos.Exit] User program [%s] exits with status [%d].\n", NachosThread.thisThread().getName(), new Long(status));
+        NachosThread.thisThread().setReturnCode(status);
 		NachosThread.thisThread().finish();
 	}
 
@@ -570,8 +579,16 @@ class Nachos implements Runnable {
         NachosThread newProcess = new NachosThread(name);
         newProcess.setSpace(space);
         
+        // set the process id
         int newId = P_ID++;
         Debug.printf('x', "[Nachos.Exec] Scheduling process [%s] with pid [%d].\n", name, new Long(newId));
+        newProcess.setSpaceId(newId);
+        
+        // inform this thread that it has a new child
+        NachosThread.thisThread().addChild(newProcess);
+        newProcess.setParent(NachosThread.thisThread());
+        
+        // schedule spawned process
         newProcess.fork(new ProcessThread());
         
 		return newId;
@@ -610,7 +627,39 @@ class Nachos implements Runnable {
 	 * status.
 	 */
 	public static int Join(int id) {
-		return 0;
+        Debug.printf('x', "[Nachos.Join] Joining process [%d] with child [%d]\n", new Integer(NachosThread.thisThread().getSpaceId()), new Integer(id));
+        
+        // check if the running process can actually join the intended process
+        boolean found = false;
+        String childName = null;
+        for (int i = 0, n = NachosThread.thisThread().countChildren(); i < n; i++) {
+            NachosThread child = NachosThread.thisThread().getChild(i);
+            if (child.getParent() != null && child.getSpaceId() == id && child.getParent() == NachosThread.thisThread()) {
+                child.setParentJoining(true);
+                childName = child.getName();
+                found = true;
+                break;
+            }
+        }
+        
+        if (found) {
+            // we now need to make the current thread yield and wait for the child process to finish
+            // we will basically wait on our own condition, then, when the child process finishes, will signal us on this same condition
+            NachosThread.thisThread().getJoinLock().acquire();
+            //Scheduler.readyToRun(NachosThread.thisThread());
+            NachosThread.thisThread().getJoinCondition().wait(NachosThread.thisThread().getJoinLock());
+            NachosThread.thisThread().getJoinLock().release();
+        }
+        else {
+            Debug.printf('x', "[Nachos.Join] Process [%d] does not own process [%d]. Cannot allow Join!\n", 
+                              new Integer(NachosThread.thisThread().getSpaceId()), new Integer(id));
+            return -1;
+        }
+        
+        Debug.printf('x', "[Nachos.Join] child process [%s] with pid [%d] finished with retcode [%d].\n",
+                          new Object[] {childName, new Integer(id), new Integer(NachosThread.thisThread().getJoinedProcessReturnCode())});
+        
+		return NachosThread.thisThread().getJoinedProcessReturnCode();
 	}
 
 	/*
