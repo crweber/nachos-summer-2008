@@ -70,6 +70,11 @@ public class ThreadInstrumentation {
     }
     
     public static void printGenericInfo(String name, int ticksAtCreation, int ticksAtExit, int cpuTicks) {
+        /*Debug.println('x', 
+                "Thread [" + name + "] was created at [Ticks:" + ticksAtCreation + "], finished at [Ticks:" +
+                ticksAtExit + "], lived for [Ticks:" +  (ticksAtExit - ticksAtCreation) + 
+                "], and got [Ticks:" + cpuTicks + "] active ticks on the cpu."); 
+          */   
         StringBuffer buff = new StringBuffer("Thread [");
         buff.append(name);
         buff.append("] was created at [Ticks:");
