@@ -236,6 +236,7 @@ class Interrupt {
   public static void halt() {
     System.out.print("Machine halting!\n\n");
     Nachos.stats.print();
+    ThreadInstrumentation.displayInformation();
     Nachos.cleanup();     // Never returns.
   }
 

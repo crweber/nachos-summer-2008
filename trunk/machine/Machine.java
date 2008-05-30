@@ -216,7 +216,7 @@ class Machine {
 
     Debug.println('m', "Starting user thread " + 
 		  Thread.currentThread().getName() +
-		  "at time " + Nachos.stats.totalTicks);
+		  " at time " + Nachos.stats.totalTicks);
 
     Interrupt.setStatus(Interrupt.UserMode);
     for (;;) {

@@ -44,8 +44,7 @@ class NachosThread extends Thread implements Printable {
   private int ticksSinceLastScheduled;
   // total cpu ticks this thread has gotten
   private int cpuTicks;
-
-
+  
   public static NachosThread thisThread() {
     return (NachosThread) currentThread();
   }
@@ -56,6 +55,11 @@ class NachosThread extends Thread implements Printable {
 
   public int getStatus() { 
     return status;
+  }
+  
+  // returns location of the executable file for this process
+  public String getExecutableLocation() {
+      return this.space.getExecutablePath();
   }
   
   public void setTicksAtCreation(int ticksAtCreation) {
@@ -165,12 +169,20 @@ class NachosThread extends Thread implements Printable {
 
     // record the time
     setTicksAtExit(Nachos.stats.totalTicks);
+    incrementCpuTicks(Nachos.stats.totalTicks - getTicksSinceLastScheduled());
     
     // store instrumentation info
     ThreadInstrumentation.addElement(this);
     
     // dump this thread's info
     ThreadInstrumentation.printThreadInfo(this);
+    
+    // delete the memory allocated by this thread
+    if (space != null && space.pageTable != null) {
+        for (int i = 0; i < space.pageTable.length; i++) {
+            MemoryManagement.instance.deallocatePage(space.pageTable[i].physicalPage);
+        }
+    }
     
     Scheduler.threadToBeDestroyed = thisThread();
     sleep();				

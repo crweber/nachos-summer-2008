@@ -41,12 +41,17 @@ class ProgTest implements Runnable {
 
     try {
       space = new AddrSpace(executable);
+      space.setExecutablePath(new File(execName).getCanonicalPath());
     }
     catch (IOException e) {
-      Debug.println('+', "Unable to read executable file: " + execName);
-      return;
+        Debug.println('+', "Unable to read executable file: " + execName);
+        return;
     }
-
+    catch (NachosException ne) {
+        // not enough free pages
+        Debug.printf('+', "Could not find enough pages to allocate process [%s]\n", execName);
+        return;
+    }
 
     NachosThread.thisThread().setSpace(space);
 

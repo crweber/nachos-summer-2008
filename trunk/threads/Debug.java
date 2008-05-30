@@ -168,6 +168,11 @@ class Debug {
 	kprintn(l, 16);
 	pcFlag = lFlag = false;
 	continue;
+    
+      case 'f':
+    System.out.print(((Number) o[nextObj++]).doubleValue());
+    pcFlag = lFlag = false;
+    continue;
 
       default:
 	System.out.print('%');
