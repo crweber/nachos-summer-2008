@@ -40,7 +40,7 @@ class Machine {
   // sign-extension, if applicable).  The above constant is the
   // bitmask used.
 
-  private static final boolean USE_TLB = false;
+  private static final boolean USE_TLB = true;
 
 
   // Definitions related to the size, and format of user memory

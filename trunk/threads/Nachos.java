@@ -477,7 +477,6 @@ class Nachos implements Runnable {
 				break;
 			}
             
-            // no need to increment if we just created a new process
         	Machine.registers[Machine.PrevPCReg] = Machine.registers[Machine.PCReg];
 			Machine.registers[Machine.PCReg] = Machine.registers[Machine.NextPCReg];
 			Machine.registers[Machine.NextPCReg] += 4;
@@ -487,6 +486,14 @@ class Nachos implements Runnable {
             
 			return;
 		}
+        else if (which == Machine.PageFaultException) {
+            // on page faults, we don't need to increment the program counter registers
+            // first, get the address that caused this exception
+            int virtualAddress = Machine.registers[Machine.BadVAddrReg];
+            
+            // now, just invoke the page controller, which will make it all right
+            PageController.getInstance().handlePageFault(virtualAddress);
+        }
 
 		System.out.println("Unexpected user mode exception " + which + ", "
 				+ type);
