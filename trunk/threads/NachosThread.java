@@ -337,13 +337,18 @@ class NachosThread extends Thread implements Printable {
         // of branch delay possibility
         Machine.writeRegister(Machine.NextPCReg, 4);
 
+        //Machine.writeRegister(Machine.StackReg, (pageTable[numPages - 1].physicalPage + 1) * Machine.PageSize - 16);
+        //Debug.printf('a', "Initializing stack register to [%d].\n", new Long((pageTable[numPages - 1].physicalPage + 1) * Machine.PageSize - 16));
+
+
         // Set the stack register to the end of the address space, where we
         // allocated the stack; but subtract off a bit, to make sure we don't
         // accidentally reference off the end!
-        //Machine.writeRegister(Machine.StackReg, (pageTable[numPages - 1].physicalPage + 1) * Machine.PageSize - 16);
-        //Debug.printf('a', "Initializing stack register to [%d].\n", new Long((pageTable[numPages - 1].physicalPage + 1) * Machine.PageSize - 16));
-        Machine.writeRegister(Machine.StackReg, numVirtualPages * Machine.PageSize - 16);
-        Debug.println('a', "Initializing stack register to " + (numVirtualPages * Machine.PageSize - 16));
+        
+        // ok, we've got it, now, just use the given physical address in that page
+        int stackRegisterAddress = (getNumVirtualPages() * Machine.PageSize) - 16;
+        Machine.writeRegister(Machine.StackReg, stackRegisterAddress);
+        Debug.println('a', "[NachosThread.initRegisters] Initializing stack register to " + stackRegisterAddress + " for pid [" + getSpaceId() + "]");
   }
   
   
