@@ -124,9 +124,6 @@ class Scheduler {
     Debug.println('t', "Switching from thread: " + oldThread.getName() +
 		  " to thread: " + nextThread.getName());
     
-    // invalidate tlb entries
-    PageController.getInstance().invalidateTlb();
-
     // We do this in Java via wait/notify of the underlying Java threads.
 
     synchronized (nextThread) {
@@ -134,6 +131,9 @@ class Scheduler {
       
       // the nextThread is about to be run, record this time
       nextThread.setTicksSinceLastScheduled(Nachos.stats.totalTicks);
+      
+      // new thread to gain control, invalidate entries
+      PageController.getInstance().invalidateTlb();
       
       nextThread.notify();
     }
@@ -144,6 +144,9 @@ class Scheduler {
         while (oldThread.getStatus() != NachosThread.RUNNING) { 
             try {oldThread.wait();} catch (InterruptedException e) {};
         }
+        
+        // this thread just woke up... invalidate entries again
+        PageController.getInstance().invalidateTlb();
     }
     
     Debug.println('t', "Now in thread: " + NachosThread.thisThread().getName());
@@ -156,10 +159,7 @@ class Scheduler {
     }
     
     if (Nachos.USER_PROGRAM) {
-      if (oldThread.space != null) {// if there is an address space
-	oldThread.restoreUserState();     // to restore, do it.
-	oldThread.space.restoreState();
-      }
+        oldThread.restoreUserState();     // to restore, do it.
     }
     
   }

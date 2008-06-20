@@ -358,10 +358,10 @@ public class PageTable {
         // check we have enough free pages
         if (!MemoryManagement.instance.enoughPages(numPages)) {
             // no harm done... just throw an exception
-            throw new NachosException("Not enough free pages!");
+            throw new NachosException("[PageTable.allocateNewProcess] Not enough free pages!");
         }
 
-        Debug.println('a', "Initializing address space, numPages=" 
+        Debug.println('a', "[PageTable.allocateNewProcess] Initializing address space, numPages=" 
                 + numPages + ", size=" + size);
 
         // first, set up the translation 
@@ -400,7 +400,7 @@ public class PageTable {
         // now, rather than do it in one chunk, we need to do this page by page...
         // we cannot assume anymore that our pages will be adjacent
         if (noffH.code.size > 0) {
-            Debug.println('a', "Initializing code segment, at " +
+            Debug.println('a', "[PageTable.allocateNewProcess] Initializing code segment, at " +
                     noffH.code.virtualAddr + ", size " +
                     noffH.code.size);
 
@@ -415,7 +415,7 @@ public class PageTable {
         }
       
         if (noffH.initData.size > 0) {
-            Debug.println('a', "Initializing data segment, at " +
+            Debug.println('a', "[PageTable.allocateNewProcess] Initializing data segment, at " +
                     noffH.initData.virtualAddr + ", size " +
                     noffH.initData.size);
 
