@@ -24,16 +24,11 @@ import java.util.Map;
 class AddrSpace {
 
   static final int UserStackSize = 1024; // increase this as necessary!
-  static final int MaxOpenFiles = 30;
   
-
   TranslationEntry pageTable[];
   int numPages;
   String executablePath;
 
-  Map openFiles;
-  int nextID = 2;
-  
   //----------------------------------------------------------------------
   // 	Create an address space to run a user program.
   //	Load the program from a file "executable", and set everything
@@ -130,9 +125,6 @@ class AddrSpace {
           //        (int)noffH.code.size);
       }
     
-    //initialize structures for open files
-    openFiles = new Hashtable();
-    nextID = 2;
 
       if (noffH.initData.size > 0) {
           Debug.println('a', "Initializing data segment, at " +
@@ -170,7 +162,7 @@ class AddrSpace {
    * 
    * @throws IOException if something goes wrong
    */
-  private void copyToMainMemory(RandomAccessFile executable, long fileOffset, int size, TranslationEntry[] pageTable, int pageTableOffset, int bitOffset) 
+  static void copyToMainMemory(RandomAccessFile executable, long fileOffset, int size, TranslationEntry[] pageTable, int pageTableOffset, int bitOffset) 
       throws IOException {
       // first off, see how many "full" pages we need to copy from the file to memory
       int fullPages = size / Machine.PageSize;
@@ -197,49 +189,9 @@ class AddrSpace {
       }
       
   }
-  
-  // returns the path of the executable file that this address space corresponds to
-  public String getExecutablePath() {
-      return this.executablePath;
-  }
-  
-  // sets the executable path
-  public void setExecutablePath(String executablePath) {
-      this.executablePath = executablePath;
-  }
 
 
-  //----------------------------------------------------------------------
-  // InitRegisters
-  // 	Set the initial values for the user-level register set.
-  //
-  // 	We write these directly into the "machine" registers, so
-  //	that we can immediately jump to user code.  Note that these
-  //	will be saved/restored into the currentThread->userRegisters
-  //	when this thread is context switched out.
-  //----------------------------------------------------------------------
 
-    void initRegisters() {
-        int i;
-
-        for (i = 0; i < Machine.NumTotalRegs; i++)
-            Machine.writeRegister(i, 0);
-
-        // Initial program counter -- must be location of "Start"
-        Machine.writeRegister(Machine.PCReg, 0);	
-
-        // Need to also tell MIPS where next instruction is, because
-        // of branch delay possibility
-        Machine.writeRegister(Machine.NextPCReg, 4);
-
-        // Set the stack register to the end of the address space, where we
-        // allocated the stack; but subtract off a bit, to make sure we don't
-        // accidentally reference off the end!
-        //Machine.writeRegister(Machine.StackReg, (pageTable[numPages - 1].physicalPage + 1) * Machine.PageSize - 16);
-        //Debug.printf('a', "Initializing stack register to [%d].\n", new Long((pageTable[numPages - 1].physicalPage + 1) * Machine.PageSize - 16));
-        Machine.writeRegister(Machine.StackReg, numPages * Machine.PageSize - 16);
-        Debug.println('a', "Initializing stack register to " + (numPages * Machine.PageSize - 16));
-  }
 
   //----------------------------------------------------------------------
   // SaveState
@@ -260,8 +212,8 @@ class AddrSpace {
   //----------------------------------------------------------------------
 
   void restoreState() {
-    Machine.pageTable = pageTable;
-    Machine.pageTableSize = numPages;
+    //Machine.pageTable = pageTable;
+    //Machine.pageTableSize = numPages;
   }
   
 
@@ -273,163 +225,7 @@ class AddrSpace {
 	 * @return size of read string
 	 */
 
-	String UserSpaceStringToKernel(int vaddr) {
-        StringBuffer strBuffer = new StringBuffer();
-		int length = 0;
-		int car = 0;
 
-		Debug.printf('+', "Reading user string to kernel, starting virtual address: %s\n", ("" + vaddr));
-        
-        try {
-            // read the first byte
-            car = Machine.readMem(vaddr, 1);
-        
-    		// read until null character
-    		while (length < Nachos.MaxStringSize && car != '\0') {
-                // append to our buffer
-                strBuffer.append((char)car);
-    			vaddr++;
-    			length++;
-                car = Machine.readMem(vaddr, 1);
-    
-    		}
-        }
-        catch (MachineException e) {
-            // Ups! Machine translation failed!
-            e.printStackTrace();
-        }
-
-		if (length >= Nachos.MaxStringSize) {
-			// we should not have read anything at all, it went over the limit!
-            return "";
-		} 
-
-		return strBuffer.toString();
-	}
-
-	/**
-	 * Read data from kernel and write in address space
-	 * 
-	 * @param vaddr
-	 * @param length
-	 * @param buf
-	 * @return size of written buffer
-	 */
-	int KernelSpaceToUserBuffer(int vaddr, int length, byte[] buf) {
-		int i;
-
-		Debug.printf('+', "Writing buffer to user address space, starting virtual address %d, length %d bytes.\n", new Integer(vaddr), new Integer(length));
-		for (i = 0; i < length; i++) {
-
-			if (Machine.writeMem(vaddr, 1, buf[i]) == false) {
-				return -1;
-			}
-
-			vaddr++;
-
-		}
-		return length;
-	}
-	
-
-	/**
-	 * 
-	 * @param vaddr
-	 * @param length
-	 * @param buf
-	 * @return length of buffer written
-	 */
-	int UserBufToKernelSpace(int vaddr, int length, byte[] buf) {
-		int car = -1;
-		int i;
-
-		Debug.printf(
-						'+',
-						"Reading buffer from user address space, starting virtual address %d, length %d bytes.\n",
-						new Integer(vaddr), new Integer(length));
-		for (i = 0; i < length; i++) {
-			try {
-				car = Machine.readMem(vaddr, 1);
-			} catch (MachineException e) {
-				// Ups! Machine translation failed!
-				e.printStackTrace();
-			}
-			buf[i] = (byte) car;
-			vaddr++;
-
-		}
-		return length;
-	}
-
-
-
-/**
- * Add a new file to the list of opened files and return an ID
- */
-int generateOpenFileId(OpenFileStub file)
-{
-        
-    // insert file to open file's table and return ID
-    
-  
-    if (nextID == MaxOpenFiles)
-    {
-       	Debug.println('+', "Open file table is full");
-        return -1;
-    }
-    else
-    {
-            Debug.ASSERT(nextID < MaxOpenFiles);
-            nextID++;
-            openFiles.put(new Integer(nextID), file);
-            Debug.printf('+', "Adding to open table of files, file: %s", ("" + nextID));  
-            
-                                      
-    }
-    return nextID;
-}
-
-
-/**
- * 
- * @param fileId
- * @return the removed file
- */
-OpenFileStub deleteOpenFile(int fileId)
-{
-	OpenFileStub tmp = null;
-    
-    //check that the fileId is valid
-    if (fileId < 2 || fileId >= MaxOpenFiles)
-    {
-          Debug.println('+', "Invalid file id");
-          
-    }
-    else
-    {
-            tmp = (OpenFileStub)openFiles.get(new Integer(fileId));
-            openFiles.remove(new Integer(fileId));
-    }
-    return tmp;
-}
-
-/**
- * 
- */
-OpenFileStub getOpenFile(int fileId)
-{
-    OpenFileStub file = null;
-    
-    if (fileId < 2 || fileId >= MaxOpenFiles)
-    {
-    	Debug.println('+', "Invalid file id");
-    }
-    else
-    {
-            file = (OpenFileStub)openFiles.get(new Integer(fileId));
-    }
-    return file;
-}
 
 
 

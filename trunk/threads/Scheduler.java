@@ -118,15 +118,14 @@ class Scheduler {
     oldThread = NachosThread.thisThread();
     
     if (Nachos.USER_PROGRAM) {  // ignore until running user programs 
-      if (oldThread.space != null) {// if this thread runs a user program,
         oldThread.saveUserState(); // save the user's CPU registers
-	oldThread.space.saveState();
-      }
     }
-
 
     Debug.println('t', "Switching from thread: " + oldThread.getName() +
 		  " to thread: " + nextThread.getName());
+    
+    // invalidate tlb entries
+    PageController.getInstance().invalidateTlb();
 
     // We do this in Java via wait/notify of the underlying Java threads.
 
@@ -162,6 +161,7 @@ class Scheduler {
 	oldThread.space.restoreState();
       }
     }
+    
   }
 
   //----------------------------------------------------------------------

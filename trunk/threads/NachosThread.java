@@ -1,5 +1,7 @@
 import java.util.List;
 import java.util.ArrayList;
+import java.util.Map;
+import java.util.Hashtable;
 
 // NachosThread.java
 //	Nachos threads class.  There are four main methods:
@@ -25,6 +27,8 @@ class NachosThread extends Thread implements Printable {
   static final int RUNNING = 1;
   static final int READY = 2;
   static final int BLOCKED = 3;
+  
+  static final int MaxOpenFiles = 30;
   
   // instancs vars
   private Runnable runnableObject;
@@ -62,13 +66,29 @@ class NachosThread extends Thread implements Printable {
   private Lock joinLock;
   private Condition joinCondition;
   
+  Map openFiles;
+  int nextID = 2;
+  
+  private String executablePath;
+  
   // our return code
   private int returnCode = -1;
   // return code of joined process (if any)
   private int joinedProcessReturnCode = -1;
   
+  // number of virtual pages used by this process
+  private int numVirtualPages;
+  
   public static NachosThread thisThread() {
     return (NachosThread) currentThread();
+  }
+  
+  public void setNumVirtualPages(int numVirtualPages) {
+      this.numVirtualPages = numVirtualPages;
+  }
+  
+  public int getNumVirtualPages() {
+      return this.numVirtualPages;
   }
   
   public void setReturnCode(int returnCode) {
@@ -135,9 +155,14 @@ class NachosThread extends Thread implements Printable {
     return status;
   }
   
+  // sets the executable path
+  public void setExecutablePath(String executablePath) {
+      this.executablePath = executablePath;
+  }
+  
   // returns location of the executable file for this process
   public String getExecutableLocation() {
-      return this.space.getExecutablePath();
+      return this.executablePath;
   }
   
   public void setTicksAtCreation(int ticksAtCreation) {
@@ -191,6 +216,11 @@ class NachosThread extends Thread implements Printable {
     // init lock and condition
     joinLock = new Lock(threadName);
     joinCondition = new Condition(threadName);
+    
+    //initialize structures for open files
+    openFiles = new Hashtable();
+    nextID = 2;
+    
   }
 
   //----------------------------------------------------------------------
@@ -270,15 +300,50 @@ class NachosThread extends Thread implements Printable {
     }
     
     // delete the memory allocated by this thread
-    if (space != null && space.pageTable != null) {
-        for (int i = 0; i < space.pageTable.length; i++) {
-            MemoryManagement.instance.deallocatePage(space.pageTable[i].physicalPage);
-        }
-    }
+    PageTable.getInstance().removeCurrentProcess();
+    
+    //if (space != null && space.pageTable != null) {
+    //    for (int i = 0; i < space.pageTable.length; i++) {
+    //        MemoryManagement.instance.deallocatePage(space.pageTable[i].physicalPage);
+    //    }
+    //}
     
     Scheduler.threadToBeDestroyed = thisThread();
     sleep();				
     // not reached
+  }
+  
+
+  //----------------------------------------------------------------------
+  // InitRegisters
+  //    Set the initial values for the user-level register set.
+  //
+  //    We write these directly into the "machine" registers, so
+  //    that we can immediately jump to user code.  Note that these
+  //    will be saved/restored into the currentThread->userRegisters
+  //    when this thread is context switched out.
+  //----------------------------------------------------------------------
+
+    void initRegisters() {
+        int i;
+
+        for (i = 0; i < Machine.NumTotalRegs; i++)
+            Machine.writeRegister(i, 0);
+
+        // Initial program counter -- must be location of "Start"
+        Machine.writeRegister(Machine.PCReg, 0);    
+
+        // Need to also tell MIPS where next instruction is, because
+        // of branch delay possibility
+        Machine.writeRegister(Machine.NextPCReg, 4);
+
+        // Set the stack register to the end of the address space, where we
+        // allocated the stack; but subtract off a bit, to make sure we don't
+        // accidentally reference off the end!
+        //Machine.writeRegister(Machine.StackReg, (pageTable[numPages - 1].physicalPage + 1) * Machine.PageSize - 16);
+        //Debug.printf('a', "Initializing stack register to [%d].\n", new Long((pageTable[numPages - 1].physicalPage + 1) * Machine.PageSize - 16));
+        Machine.writeRegister(Machine.StackReg, numVirtualPages * Machine.PageSize - 16);
+        Debug.println('a', "Initializing stack register to " + (numVirtualPages * Machine.PageSize - 16));
   }
   
   
@@ -386,6 +451,74 @@ class NachosThread extends Thread implements Printable {
   // print
   public void print() {
     System.out.print(getName() + ", ");
+  }
+  
+  /**
+   * Add a new file to the list of opened files and return an ID
+   */
+  int generateOpenFileId(OpenFileStub file)
+  {
+          
+      // insert file to open file's table and return ID
+      
+    
+      if (nextID == MaxOpenFiles)
+      {
+            Debug.println('+', "Open file table is full");
+          return -1;
+      }
+      else
+      {
+              Debug.ASSERT(nextID < MaxOpenFiles);
+              nextID++;
+              openFiles.put(new Integer(nextID), file);
+              Debug.printf('+', "Adding to open table of files, file: %s", ("" + nextID));  
+              
+                                        
+      }
+      return nextID;
+  }
+
+
+  /**
+   * 
+   * @param fileId
+   * @return the removed file
+   */
+  OpenFileStub deleteOpenFile(int fileId)
+  {
+    OpenFileStub tmp = null;
+      
+      //check that the fileId is valid
+      if (fileId < 2 || fileId >= MaxOpenFiles)
+      {
+            Debug.println('+', "Invalid file id");
+            
+      }
+      else
+      {
+              tmp = (OpenFileStub)openFiles.get(new Integer(fileId));
+              openFiles.remove(new Integer(fileId));
+      }
+      return tmp;
+  }
+
+  /**
+   * 
+   */
+  OpenFileStub getOpenFile(int fileId)
+  {
+      OpenFileStub file = null;
+      
+      if (fileId < 2 || fileId >= MaxOpenFiles)
+      {
+        Debug.println('+', "Invalid file id");
+      }
+      else
+      {
+              file = (OpenFileStub)openFiles.get(new Integer(fileId));
+      }
+      return file;
   }
 
 }

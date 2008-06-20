@@ -28,40 +28,49 @@ class ProgTest implements Runnable {
   }
 
   public void run() {
-    RandomAccessFile executable;
-    AddrSpace space;
-    
-    try {
-      executable = new RandomAccessFile(execName, "r");
-    }
-    catch (IOException e) {
-      Debug.println('+', "Unable to open executable file: " + execName);
-      return;
-    }
+        // get the new process id
+        int newId = 0;
+        int numPages = 0;
 
-    try {
-      space = new AddrSpace(executable);
-      space.setExecutablePath(new File(execName).getCanonicalPath());
-    }
-    catch (IOException e) {
-        Debug.println('+', "Unable to read executable file: " + execName);
-        return;
-    }
-    catch (NachosException ne) {
-        // not enough free pages
-        Debug.printf('+', "Could not find enough pages to allocate process [%s]\n", execName);
-        return;
-    }
+        RandomAccessFile executable;
+        // we won't create a new thread, rather, use the one invoking to make it the "main" process
+        // or the first process created
+        NachosThread newProcess = NachosThread.thisThread();
+        newProcess.setSpaceId(newId);
 
-    NachosThread.thisThread().setSpace(space);
+        try {
+            executable = new RandomAccessFile(execName, "r");
+            newProcess.setExecutablePath(new File(execName).getCanonicalPath());
+        } catch (IOException e) {
+            Debug.println('+', "Unable to open executable file: " + execName);
+            return;
+        }
 
-    space.initRegisters();		// set the initial register values
-    space.restoreState();		// load page table register
+        try {
+            numPages = PageTable.getInstance().allocateNewProcess(executable,
+                    newId);
+        } catch (IOException e) {
+            Debug.println('+', "Unable to read executable file: " + execName);
+            return;
+        } catch (NachosException ne) {
+            // not enough free pages
+            Debug.printf('+',
+                    "Could not find enough pages to allocate process [%s]\n",
+                    execName);
+            return;
+        }
 
-    Machine.run();			// jump to the user progam
-    Debug.ASSERT(false);		// machine->Run never returns;
-					// the address space exits
-					// by doing the syscall "exit"
-  }
+        newProcess.setNumVirtualPages(numPages);
+        newProcess.initRegisters();
+
+        Debug.printf('x',
+                "[Nachos.Exec] Scheduling process [%s] with pid [%d].\n",
+                execName, new Long(newId));
+
+        Machine.run(); // jump to the user progam
+        Debug.ASSERT(false); // machine->Run never returns;
+        // the address space exits
+        // by doing the syscall "exit"
+    }
 
 }
