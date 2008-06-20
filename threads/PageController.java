@@ -65,6 +65,7 @@ public class PageController {
         // the page is on disk if...
         if (entry.pageOffsetInDisk != -1) {
             // IT'S ON DISK! do the magic
+            
         }
         
         // replace in TLB
@@ -73,6 +74,16 @@ public class PageController {
         entry.translationEntry.valid = true;
         
     } // handlePageFault
+    
+    /**
+     * Swaps a page from MainMemory to Disk.
+     * 
+     * @param processId
+     * @param virtualAddress
+     */
+    public void swapPage(int processId, int virtualAddress) {
+        PerformanceEvaluator.pageFault(processId, virtualAddress);
+    }
     
     /**
      * Invalidates the tlb. This method is useful on a context-switch.
