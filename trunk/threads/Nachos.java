@@ -582,12 +582,12 @@ class Nachos implements Runnable {
             numPages = PageTable.getInstance().allocateNewProcess(executable, newId);
         }
         catch (IOException e) {
-            Debug.println('+', "Unable to read executable file: " + name);
+            Debug.println('+', "[Nachos.Exec] Unable to read executable file: " + name);
             return -1;
         }
         catch (NachosException ne) {
             // not enough free pages
-            Debug.printf('+', "Could not find enough pages to allocate process [%s]\n", name);
+            Debug.printf('+', "[Nachos.Exec] Could not find enough pages to allocate process [%s]\n", name);
             return -1;
         }
         
