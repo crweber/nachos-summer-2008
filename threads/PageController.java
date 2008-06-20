@@ -55,21 +55,22 @@ public class PageController {
         // get the current process id
         int processId = NachosThread.thisThread().getSpaceId();
         
-        // get the translation entry from our global page table
-        TranslationEntry entry = PageTable.getInstance().getEntry(processId, page);
-        
-        // if the entry is not there, then it is not in main memory...
-        // for now, don't do anything
-        //TODO: FETCH PAGE FROM DISK!!!
-        Debug.ASSERT(entry != null);
-        
         // we know which page was accessed, now, decide which entry in the TLB to evict
         // we use a round-robin replacement...
         int entryToEvict = nextTlbEntryToEvict();
         
-        // evict the entry in the tlb
-        // for now, assume all of the pages are on main memory
-        Machine.tlb[entryToEvict] = entry;
+        // get the translation entry from our global page table
+        PageTable.PageTableEntry entry = PageTable.getInstance().getEntry(processId, page);
+        
+        // the page is on disk if...
+        if (entry.pageOffsetInDisk != -1) {
+            // IT'S ON DISK! do the magic
+        }
+        
+        // replace in TLB
+        Machine.tlb[entryToEvict] = entry.translationEntry;
+        entry.translationEntry.use = true;
+        entry.translationEntry.valid = true;
         
     } // handlePageFault
     

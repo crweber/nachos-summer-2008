@@ -343,7 +343,7 @@ class Nachos implements Runnable {
 				break;
 			case SC_Exec:
                 // pointer to the name of the file to execute
-                String execName = NachosThread.thisThread().space.UserSpaceStringToKernel(Machine.readRegister(4));
+                String execName = PageTable.getInstance().getStringFromUserSpace(Machine.readRegister(4));
 				int newProcessId = Exec(execName);
                 Machine.writeRegister(2, newProcessId);
 				break;
@@ -361,12 +361,12 @@ class Nachos implements Runnable {
                 // file descriptor
 				int fileIdWrite = Machine.readRegister(6);
 				
-				byte[] bufferWrite = new byte[sizeWrite + 1];
+                // write data from user to kernel space
+				byte[] bufferWrite = PageTable.getInstance().copyFromUserSpace(vaddrWrite, sizeWrite);
 				
-				// write data from user to kernel address space
-                if (NachosThread.thisThread().space.UserBufToKernelSpace(vaddrWrite, sizeWrite, bufferWrite) == -1)
+                if (bufferWrite.length != sizeWrite)
                 {
-                        Debug.println('+', "Could not copy data from user address space");
+                    Debug.println('+', "Could not copy data from user address space");
                 }
                 
                 //write data from buffer
@@ -386,15 +386,14 @@ class Nachos implements Runnable {
                 // file descriptor
                 int fileIdRead = Machine.readRegister(6);
                 
-				byte[] bufferRead = new byte[sizeRead + 1];
+				byte[] bufferRead = new byte[sizeRead];
 				
 				//read data into buffer
 				int retValRead = Read(bufferRead, sizeRead, fileIdRead);
 				// write data from kernel to user address space
-                if (NachosThread.thisThread().space.KernelSpaceToUserBuffer(vaddrRead, retValRead, bufferRead) == -1)
+                if (PageTable.getInstance().copyFromKernel(bufferRead, vaddrRead) != retValRead)
                 {
-                        Debug.println('+', "Could not copy data to user address space");
-                        
+                    Debug.println('+', "Could not copy data to user address space");
                 }
                 
                 // write result
@@ -409,7 +408,7 @@ class Nachos implements Runnable {
 				int vaddr = Machine.readRegister(4);
 
 				// read the name into buffer
-				String fileCreate = NachosThread.thisThread().space.UserSpaceStringToKernel(vaddr);
+				String fileCreate = PageTable.getInstance().getStringFromUserSpace(vaddr);
 
                 // return value
                 int createRetValue = 0;
@@ -430,7 +429,7 @@ class Nachos implements Runnable {
 				int vaddrOpen = Machine.readRegister(4);
 
 				// read the name into buffer
-				String fileOpen = NachosThread.thisThread().space.UserSpaceStringToKernel(vaddrOpen);
+				String fileOpen = PageTable.getInstance().getStringFromUserSpace(vaddrOpen);
                 
                 // return value for Open
                 int openRetValue = -1;
@@ -451,7 +450,7 @@ class Nachos implements Runnable {
 				int vaddrRemove = Machine.readRegister(4);
 
 				// read the name into buffer
-				String fileRemove = NachosThread.thisThread().space.UserSpaceStringToKernel(vaddrRemove);
+				String fileRemove = PageTable.getInstance().getStringFromUserSpace(vaddrRemove);
 
                 // return value for Remove
                 int removeRetVal = 0;
@@ -486,13 +485,15 @@ class Nachos implements Runnable {
             
 			return;
 		}
-        else if (which == Machine.PageFaultException) {
+        if (which == Machine.PageFaultException) {
             // on page faults, we don't need to increment the program counter registers
             // first, get the address that caused this exception
             int virtualAddress = Machine.registers[Machine.BadVAddrReg];
             
             // now, just invoke the page controller, which will make it all right
             PageController.getInstance().handlePageFault(virtualAddress);
+            
+            return;
         }
 
 		System.out.println("Unexpected user mode exception " + which + ", "
@@ -501,7 +502,7 @@ class Nachos implements Runnable {
 		Debug.ASSERT(false);
 
 	}
-
+    
 	// ----------------------------------------------------------------------
 	// main
 	// Bootstrap the operating system kernel.
@@ -560,14 +561,7 @@ class Nachos implements Runnable {
 	 * address space identifier
 	 */
 	public static int Exec(String name) {
-        /*int newId = P_ID++;
-        name = getFullExecutablePath(name, NachosThread.thisThread().getExecutableLocation());
-        NachosThread newProcess = new NachosThread(name);
-        newProcess.fork(new ProgTest(name));
-        return newId;*/
-        
         RandomAccessFile executable;
-        AddrSpace space;
         
         // first off, we have to check if the executable is given by a full or relative path
         name = getFullExecutablePath(name, NachosThread.thisThread().getExecutableLocation());
@@ -576,12 +570,16 @@ class Nachos implements Runnable {
           executable = new RandomAccessFile(name, "r");
         }
         catch (IOException e) {
-          Debug.println('+', "Unable to open executable file: " + name);
+          Debug.println('+', "[Nachos.Exec] Unable to open executable file: " + name);
           return -1;
         }
+        
+        // get the new process id
+        int newId = P_ID++;
+        int numPages = 0;
 
         try {
-          space = new AddrSpace(executable);
+            numPages = PageTable.getInstance().allocateNewProcess(executable, newId);
         }
         catch (IOException e) {
             Debug.println('+', "Unable to read executable file: " + name);
@@ -593,13 +591,10 @@ class Nachos implements Runnable {
             return -1;
         }
         
-        space.setExecutablePath(name);
-
         NachosThread newProcess = new NachosThread(name);
-        newProcess.setSpace(space);
+        newProcess.setExecutablePath(name);
+        newProcess.setNumVirtualPages(numPages);
         
-        // set the process id
-        int newId = P_ID++;
         Debug.printf('x', "[Nachos.Exec] Scheduling process [%s] with pid [%d].\n", name, new Long(newId));
         newProcess.setSpaceId(newId);
         
@@ -617,8 +612,7 @@ class Nachos implements Runnable {
         
         public void run() {
             Debug.printf('x', "[ProcessThread.run] Running process [%s].\n", NachosThread.thisThread().getName());
-            NachosThread.thisThread().space.initRegisters();
-            NachosThread.thisThread().space.restoreState();
+            NachosThread.thisThread().initRegisters();
             
             Machine.run();
             
@@ -737,7 +731,7 @@ class Nachos implements Runnable {
         else
         {
                 // add file to open table 
-                fileId = NachosThread.thisThread().space.generateOpenFileId(file);
+                fileId = NachosThread.thisThread().generateOpenFileId(file);
                 if (fileId == -1)
                 {
                         Debug.println('+', "No more files can be opened!"); 
@@ -767,7 +761,7 @@ class Nachos implements Runnable {
         }
 		
         //id is greater than 1
-        OpenFileStub file = NachosThread.thisThread().space.getOpenFile(id);
+        OpenFileStub file = NachosThread.thisThread().getOpenFile(id);
         if (file == null)
         {
                 Debug.println('+', "File not found");
@@ -819,7 +813,7 @@ class Nachos implements Runnable {
         }
 
         //id is greater than 1
-		OpenFileStub file = NachosThread.thisThread().space.getOpenFile(id);
+		OpenFileStub file = NachosThread.thisThread().getOpenFile(id);
         if (file == null)
         {
                 Debug.println('+', "File not found");
@@ -845,7 +839,7 @@ class Nachos implements Runnable {
 	public static void Close(int id) {
 
 		// delete file id from open file table
-		OpenFile file = NachosThread.thisThread().space.deleteOpenFile(id);
+		OpenFile file = NachosThread.thisThread().deleteOpenFile(id);
 		if (file == null) {
 			Debug.println('+', "Invalid file id");
 		}
