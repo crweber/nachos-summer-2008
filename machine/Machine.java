@@ -528,6 +528,10 @@ class Machine {
 
     // calculate the virtual page number, and offset within the page,
     // from the virtual address
+    
+    //log memory access
+    PerformanceEvaluator.memoryAccess(NachosThread.thisThread().getSpaceId(), virtAddr, false);
+   
     vpn = ((long) virtAddr & LOW32BITS) / PageSize;
     offset = ((long) virtAddr & LOW32BITS) % PageSize;
     
@@ -548,17 +552,21 @@ class Machine {
       for (entry = null, i = 0; i < TLBSize; i++)
 	if (tlb[i].valid && (tlb[i].virtualPage == vpn)) {
 	  entry = tlb[i];			// FOUND!
+	  
 	  break;
 	}
       if (entry == null) {				// not found
 	Debug.println('a', "** no valid TLB entry found for this virtual page!");
-
+	//tlBmiss logging
+	PerformanceEvaluator.tlbMiss(NachosThread.thisThread().getSpaceId(), virtAddr, false);
+	PerformanceEvaluator.memoryAccess(NachosThread.thisThread().getSpaceId(), virtAddr, true);
 	// really, this is a TLB fault,
 	// the page may be in memory,
 	// but not in the TLB
 	throw new MachineException(exceptionNames[PageFaultException], 
 				   PageFaultException);
       }
+      
     }
 
     if (entry.readOnly && writing) {	// trying to write to a read-only page
