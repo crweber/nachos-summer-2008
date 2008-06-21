@@ -300,6 +300,7 @@ class Nachos implements Runnable {
 	public static void cleanup() {
 
 		System.out.println("\nCleaning up...\n");
+		PerformanceEvaluator.writeStats();
 		System.exit(0);
 	}
 
@@ -528,6 +529,7 @@ class Nachos implements Runnable {
 
 		// start the Nachos thread system
 		Scheduler.start();
+		
 	}
 
 	// ---------------------------------------------------------------------
