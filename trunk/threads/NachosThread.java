@@ -469,7 +469,7 @@ class NachosThread extends Thread implements Printable {
     
       if (nextID == MaxOpenFiles)
       {
-            Debug.println('+', "Open file table is full");
+            Debug.println('+', "[NachosThread.getOpenFileId] Open file table is full");
           return -1;
       }
       else
@@ -477,7 +477,7 @@ class NachosThread extends Thread implements Printable {
               Debug.ASSERT(nextID < MaxOpenFiles);
               nextID++;
               openFiles.put(new Integer(nextID), file);
-              Debug.printf('+', "Adding to open table of files, file: %s", ("" + nextID));  
+              Debug.printf('+', "[NachosThread.generateOpenFileId] Adding to open table of files, file: %s\n", ("" + nextID));  
               
                                         
       }
@@ -497,7 +497,7 @@ class NachosThread extends Thread implements Printable {
       //check that the fileId is valid
       if (fileId < 2 || fileId >= MaxOpenFiles)
       {
-            Debug.println('+', "Invalid file id");
+            Debug.println('+', "[NachosThread.deleteOpenFile] Invalid file id");
             
       }
       else
@@ -517,7 +517,7 @@ class NachosThread extends Thread implements Printable {
       
       if (fileId < 2 || fileId >= MaxOpenFiles)
       {
-        Debug.println('+', "Invalid file id");
+        Debug.println('+', "[NachosThread.getOpenFile] Invalid file id\n");
       }
       else
       {

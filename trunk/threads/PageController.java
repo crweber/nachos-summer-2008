@@ -8,7 +8,15 @@ public class PageController {
     // this one is private in machine... we need it anyway
     private static final long LOW32BITS = 0x00000000ffffffffL;
     
+
+    // we will use a round-robin eviction scheme, plus, we will not evict pages
+    // that belong to the currently running process (in the case of main-memory eviction)
+    private static int currentFrameIndex = 0;
+    // pure round robin for tlb eviction
     private static int currentTlbIndex = 0;
+    
+    // use one buffer overall
+    private byte[] buffer = new byte[Machine.PageSize];
     
     // only one instance allowed!
     private static final PageController instance = new PageController();
@@ -39,6 +47,21 @@ public class PageController {
     }
     
     /**
+     * Provides the index of the frame to evict.
+     * 
+     * @return Frame to evict.
+     */
+    private int nextFrameToEvict() {
+        // return the current index
+        int current = currentFrameIndex;
+        
+        // increment
+        currentFrameIndex = (currentFrameIndex + 1) % SwapPartitionController.SWAP_SIZE_PAGES;
+        
+        return current;
+    }
+    
+    /**
      * Handles a page fault... it is clever enough to bring the page from
      * disk, if needed.
      * 
@@ -62,10 +85,32 @@ public class PageController {
         // get the translation entry from our global page table
         PageTable.PageTableEntry entry = PageTable.getInstance().getEntry(processId, page);
         
-        // the page is on disk if...
-        if (entry.pageOffsetInDisk != -1) {
-            // IT'S ON DISK! do the magic
-            
+        // ok, we got the page descriptor... now, figure out if the page is already in main memory or in the disk 
+        if (entry.inMainMemory == false) {
+            // ok, it is not in main memory... let's bring it from disk
+            // but, careful... we need to see if there's still enough space on main memory!!!
+            // if not, we will need to evict one page!
+            // so first, is there enough space in main memory?
+            if (MemoryManagement.getInstance().enoughPages(1, MemoryManagement.MEMORY_TYPE_MAIN)) {
+                // yes, enough space on main memory, so just bring it over and update the page descriptor
+                // get the physical page to where this page will be allocated first
+                int physicalPage = MemoryManagement.getInstance().allocatePage(MemoryManagement.MEMORY_TYPE_MAIN);
+                entry.translationEntry.physicalPage = physicalPage;
+                // ok, be extra paranoid
+                Debug.ASSERT(physicalPage != -1, "[PageController.handlePageFault] Could not allocate a page!");
+                
+                // and perform the actual copying of data from swapping partition to main memory
+                Debug.printf('x', "[PageController.handlePageFault] Copying from swap partition to main memory %s\n", entry.toString());
+                SwapPartitionController.getInstance().getPage(entry.swapPage, buffer);
+                writeToMainMemory(entry, buffer);
+                
+                // update metadata
+                entry.inMainMemory = true;
+            }
+            else {
+                // so, not enough space in main memory... need to swap something out
+                swapPage(entry);
+            }
         }
         
         // replace in TLB
@@ -76,13 +121,117 @@ public class PageController {
     } // handlePageFault
     
     /**
-     * Swaps a page from MainMemory to Disk.
+     * After completion, the passed page entry will reside in main memory, while another page on main memory will be swapped back to disk.
      * 
-     * @param processId
-     * @param virtualAddress
+     * @param pageEntry The descriptor of the page that will be swapped into main memory.
      */
-    public void swapPage(int processId, int virtualAddress) {
-        PerformanceEvaluator.pageFault(processId, virtualAddress);
+    public void swapPage(PageTable.PageTableEntry pageEntry) {
+        PerformanceEvaluator.pageFault(pageEntry.processId, pageEntry.translationEntry.virtualPage);
+        Debug.printf('x', "[PageController.swapPage] Swapping-in %s\n", pageEntry.toString());
+        
+        // process id
+        int processId = NachosThread.thisThread().getSpaceId();
+        
+        // we know that there are no free pages on main memory, so we can traverse the inverted page table
+        boolean found = false;
+        PageTable.PageTableEntry pageToEvict = null;
+        int numberOfAttempts = 0;
+        
+        // try to traverse the inverted page table only once (using the numberOfAttempts counter helps)
+        while (!found && numberOfAttempts < SwapPartitionController.SWAP_SIZE_PAGES) {
+            // get a candidate page to evict
+            // first, get the entries associated to a frame
+            PageTable.PageTableEntry entry = PageTable.getInstance().getEntriesAt(nextFrameToEvict());
+            
+            // traverse the entries and check process id and whether or not they are on main memory as we go
+            // as soon as we find one entry whose process id is different from the one of the current process
+            // and that entry is on main memory, we will stop
+            pageToEvict = entry;
+            while (pageToEvict != null) {
+                if (pageToEvict.processId != processId && pageToEvict.inMainMemory) {
+                    // we found one to evict!
+                    found = true;
+                    break;
+                }
+                pageToEvict = entry.nextPageTableEntry;
+            }
+            
+            // increment the number of attempts
+            numberOfAttempts++;
+        }
+        
+        // it could be that the current process occupies the whole main memory...
+        if (pageToEvict == null) {
+            // just evict something!
+            pageToEvict = PageTable.getInstance().getEntriesAt(nextFrameToEvict());
+        }
+        
+        // we now have a page to evict
+        // do we need to write back to disk?
+        if (pageToEvict.translationEntry.dirty) {
+            Debug.printf('x', "[PageController.swapPage] Writing back dirty page %s\n", pageToEvict.toString());
+            // we need to write back to the swapping partition
+            // read the contents from memory
+            readFromMainMemory(pageToEvict, buffer);
+            
+            // and write to the swap partition
+            SwapPartitionController.getInstance().writePage(buffer, pageToEvict.swapPage, 0);
+            
+            // and this page is not dirty anymore
+            pageToEvict.translationEntry.dirty = false;
+        }
+        Debug.printf('x', "[PageController.swapPage] Evicting %s\n", pageToEvict.toString());
+        
+        // update physical page info for the swapped-in page
+        pageEntry.translationEntry.physicalPage = pageToEvict.translationEntry.physicalPage;
+        
+        // at this point, we can use a spot in main memory
+        // copy from the swapping partition to the buffer, and then to main memory
+        SwapPartitionController.getInstance().getPage(pageEntry.swapPage, buffer);
+        writeToMainMemory(pageEntry, buffer);
+        
+        // update the bit indicating that the page is in main memory, and some other metadata
+        pageEntry.inMainMemory = true;
+        pageEntry.translationEntry.use = true;
+        
+        // update metadata for the evicted page
+        pageToEvict.translationEntry.valid = false;
+        pageToEvict.inMainMemory = false;
+        pageToEvict.translationEntry.physicalPage = -1;
+
+    }
+        
+
+    /**
+     * Reads a page from main memory into the buffer.
+     * 
+     * @param pageEntry Page descriptor of the page that wants to be read.
+     * @param buffer Buffer to place the read data.
+     */
+    public void readFromMainMemory(PageTable.PageTableEntry pageEntry, byte[] buffer) {
+        for (int i = pageEntry.translationEntry.physicalPage * Machine.PageSize,
+                n = (pageEntry.translationEntry.physicalPage + 1) * Machine.PageSize,
+                j = 0;
+            i < n;
+            i++, j++) {
+           buffer[j] = Machine.mainMemory[i];
+        }
+    }
+    
+    /**
+     * Writes the provided data to main memory.
+     * 
+     * @param pageEntry Descriptor of the page that needs to be written.
+     * @param buffer Buffer to copy.
+     */
+    public void writeToMainMemory(PageTable.PageTableEntry pageEntry, byte[] buffer) {
+        for (int i = pageEntry.translationEntry.physicalPage * Machine.PageSize,
+                n = (pageEntry.translationEntry.physicalPage + 1) * Machine.PageSize,
+                j = 0;
+            i < n;
+            i++, j++) {
+            Machine.mainMemory[i] = buffer[j];
+        }
     }
     
     /**
