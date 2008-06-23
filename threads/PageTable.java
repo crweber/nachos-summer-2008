@@ -12,8 +12,8 @@ public class PageTable {
     // value: <physicalPageNumber> (which is used as index)
     private final Map anchorTable = new HashMap();
 
-    // page table entry
-    private final PageTableEntry[] pageTable = new PageTableEntry[Machine.MemorySize / Machine.PageSize];
+    // page table entry, we now use virtual memory, so we need to keep track of pages in use
+    private final PageTableEntry[] pageTable = new PageTableEntry[SwapPartitionController.SWAP_SIZE_PAGES];
     
     // enforce only one instance
     private final static PageTable instance = new PageTable();
@@ -37,7 +37,7 @@ public class PageTable {
      * 
      * @return the physical address.
      */
-    public int translateAddress(int processId, int virtualAddress) {
+    private int translateAddress(int processId, int virtualAddress) {
         // obtain the virtualPageNumber and offset
         int virtualPageNumber = virtualAddress / Machine.PageSize;
         int offset = virtualAddress % Machine.PageSize;
@@ -46,7 +46,11 @@ public class PageTable {
         PageTableEntry entry = getEntry(processId, virtualPageNumber);
         Debug.ASSERT(entry != null, "[PageTable.translateAddress] Page missing!!!");
         
-        //TODO: WHAT IF THE PAGE IS ACTUALLY ON HARD DISK???
+        // it might be so that the page is not in main memory...
+        if (!entry.inMainMemory) {
+            // if so, swap-in this page and perform the translation
+            PageController.getInstance().swapPage(entry);
+        }
         
         // perform the actual translation
         return ((entry.translationEntry.physicalPage * Machine.PageSize) + offset);
@@ -64,7 +68,7 @@ public class PageTable {
      * 
      * @return The physical address.
      */
-    public int translateAddress(int processId, int virtualAddress, int previousVirtualAddress, int previousPhysicalAddress) {
+    private int translateAddress(int processId, int virtualAddress, int previousVirtualAddress, int previousPhysicalAddress) {
         // check if the two provided virtual addresses are on the same page, if so, 
         // no need to translate, just return the previousPhysicalAddress + the offset between them
         if ((virtualAddress / Machine.PageSize) == (previousVirtualAddress / Machine.PageSize)) {
@@ -197,6 +201,17 @@ public class PageTable {
         return buffer.toString();
         
     } // getStringFromUserSpace
+        
+    /**
+     * Returns the entries that are associated to the provided index (frame)
+     * 
+     * @param frameIndex The index of the frame.
+     * 
+     * @return The first entry located in this frame.
+     */
+    public PageTableEntry getEntriesAt(int frameIndex) {
+        return pageTable[frameIndex];
+    }
     
     /**
      * Returns a translation entry for a given process and virtual page number.
@@ -232,13 +247,16 @@ public class PageTable {
     }
     
     /**
-     * Removes the entries for the current process.
+     * Removes the entries for the current process in the inverted page table, swap partition and main memory.
      */
     public void removeCurrentProcess() {
         // get the process id
         int processId = NachosThread.thisThread().getSpaceId();
         // and the number of virtual pages this uses
         int numVirtualPages = NachosThread.thisThread().getNumVirtualPages();
+        
+        Debug.printf('x', "[PageTable.removeCurrentProcess] Deallocating %d pages from process %d\n", 
+                          new Integer(numVirtualPages), new Integer(processId));
         
         // and start to dealloacate each one of them
         for (int i = 0; i < numVirtualPages; i++) {
@@ -263,6 +281,8 @@ public class PageTable {
                             // current is the only entry (since it does not have next entry)
                             // we need to remove the index from the anchor table if this is the only entry!
                             anchorTable.remove(key);
+                            // and to actually remove the reference from here
+                            pageTable[index.intValue()] = null;
                         } else {
                             // it is the first one, but there are more to come, just update pointers
                             // to make the next entry the first one in the chain
@@ -270,8 +290,13 @@ public class PageTable {
                         }
                     }
 
-                    // flag in the memory management that this frame is free
-                    MemoryManagement.instance.deallocatePage(current.translationEntry.physicalPage);
+                    // flag in the memory management that this frame is free in the swap partition
+                    MemoryManagement.getInstance().deallocatePage(current.swapPage, MemoryManagement.MEMORY_TYPE_SWAP);
+                    
+                    // and only if the page also resides on main memory, we need to deallocate it from there
+                    if (current.inMainMemory) {
+                        MemoryManagement.getInstance().deallocatePage(current.translationEntry.physicalPage, MemoryManagement.MEMORY_TYPE_MAIN);
+                    }
                     
                     // set the references to null
                     current.translationEntry = null;
@@ -303,13 +328,13 @@ public class PageTable {
         // will there be a colision?
         if (index == null) {
             // no, simply store it
-            pageTable[entry.translationEntry.physicalPage] = entry;
+            pageTable[entry.swapPage] = entry;
             
             // and make sure that it is not pointing to anybody else
             entry.nextPageTableEntry = null;
             
             // also, store this info in the anchor table
-            anchorTable.put(key, new Integer(entry.translationEntry.physicalPage));
+            anchorTable.put(key, new Integer(entry.swapPage));
             
         } else {
             // yes, colision
@@ -327,7 +352,24 @@ public class PageTable {
     }
     
     /**
-     * Allocates a new process in memory.
+     * Allocates a new process in the swapping partition.
+     * 
+     * The main memory is used as a cache for the swapping partition, therefore, when a new process is allocated, its pages are
+     * copied to the swapping partition and PageController should control which pages are swapped into/from main memory.
+     * 
+     * We could even extend this and make it even more efficient and don't copy anything to the swap partition unless it is modified,
+     * in this way, code and read-only data (or read/write data that hasn't been written into) will be referenced from the
+     * file containing the "executable" file, and, whenever we find a dirty page that needs to be evicted from main memory, copy that
+     * page from main memory to the swap partition and change all reference. This would be a pretty good approach, but, we would also
+     * need to keep track of file descriptors and offsets within the executable file for each page. Also, if we keep a swap partition
+     * it is more likely that there will be less scanning on the disk.
+     * 
+     * We chose the simple approach of copying the executable file to the swapping partition for ease of maintenance, plus, for
+     * reliability reasons... Suppose the executable file is on a remote device somehow mounted to the OS... If at some point that
+     * device is unmounted or somehow disconnected, then the OS won't be able to resume the execution of that executable. 
+     * We assume, of course, that the swap partition is always mounted and that the OS alone has total control over it. Of course,
+     * if the swap partition is somehow damaged, we think that not being able to run a specific program would be the least of the
+     * problems because a new swap partition would have to be created somehow.
      * 
      * @param RandomAccessFile The file with the process code/data.
      * @param processId The id of the process to be allocated.
@@ -349,31 +391,32 @@ public class PageTable {
 
         size = numPages * Machine.PageSize;
 
-        Debug.ASSERT((numPages <= Machine.NumPhysPages),// check we're not trying
-        "[PageTable.allocateNewProcess]: Not enough memory!");
-        // to run anything too big --
-        // at least until we have
-        // virtual memory
-        
         // check we have enough free pages
-        if (!MemoryManagement.instance.enoughPages(numPages)) {
+        if (!MemoryManagement.getInstance().enoughPages(numPages, MemoryManagement.MEMORY_TYPE_SWAP)) {
             // no harm done... just throw an exception
             throw new NachosException("[PageTable.allocateNewProcess] Not enough free pages!");
         }
 
-        Debug.println('a', "[PageTable.allocateNewProcess] Initializing address space, numPages=" 
-                + numPages + ", size=" + size);
+        Debug.println('x', "[PageTable.allocateNewProcess] Loading process, numPages=" + numPages + ", size=" + size);
+        
+        // some useful zeroes
+        byte[] zeroes = new byte[Machine.PageSize];
 
         // first, set up the translation 
-        //pageTable = new TranslationEntry[numPages];
         for (int i = 0; i < numPages; i++) {
             PageTableEntry entry = new PageTableEntry(processId);
             entry.translationEntry.virtualPage = i; 
-            int physicalPage = MemoryManagement.instance.allocatePage();
+            int swapPage = MemoryManagement.getInstance().allocatePage(MemoryManagement.MEMORY_TYPE_SWAP);
             // before even getting the address space set-up, we should've checked that there
             // was enough memory, so, this should not create any problems
-            Debug.ASSERT(physicalPage != -1, "[PageTable.allocateNewProcess] There are not enough pages available!!!");
-            entry.translationEntry.physicalPage = physicalPage;
+            Debug.ASSERT(swapPage != -1, "[PageTable.allocateNewProcess] There are not enough pages available!!!");
+            // right now we cannot determine the frame in main memory that this page will be allocated into
+            entry.translationEntry.physicalPage = -1;
+            // we can, however, know the swapping page
+            entry.swapPage = swapPage;
+            // and, of course, it is NOT in main memory
+            entry.inMainMemory = false;
+            // set the other bits accordingly
             entry.translationEntry.valid = true;
             entry.translationEntry.use = false;
             entry.translationEntry.dirty = false;
@@ -383,28 +426,22 @@ public class PageTable {
             
             // the entry has been created, set it on the page table
             setEntry(processId, i, entry);
+            
+            // as we create the entries in the inverted page table, we can zero out the swap partition that will
+            // hold these pages
+            SwapPartitionController.getInstance().writePage(zeroes, entry.swapPage, 0);
         }
-
-        // zero out the entire address space, to zero the unitialized data 
-        // segment and the stack segment
-        for (int i = 0; i < numPages; i++) {
-            PageTableEntry entry = getEntry(processId, i);
-            for (int j = entry.translationEntry.physicalPage * Machine.PageSize, 
-                     n = (1 + entry.translationEntry.physicalPage) * Machine.PageSize; 
-                 j < n; j++) {
-                Machine.mainMemory[j] = 0;
-            }
-        }
-
-        // then, copy in the code and data segments into memory
+        
+        // we cannot longer just copy the pages to main memory, we have to copy them to the swap partition...
+        // copy in the code and data segments into memory
         // now, rather than do it in one chunk, we need to do this page by page...
         // we cannot assume anymore that our pages will be adjacent
         if (noffH.code.size > 0) {
-            Debug.println('a', "[PageTable.allocateNewProcess] Initializing code segment, at " +
+            Debug.println('x', "[PageTable.allocateNewProcess] Initializing code segment, at " +
                     noffH.code.virtualAddr + ", size " +
                     noffH.code.size);
 
-            copyToMainMemory(
+            copyToSwapPartition(
                     executable, 
                     noffH.code.inFileAddr, 
                     (int)noffH.code.size, 
@@ -415,11 +452,11 @@ public class PageTable {
         }
       
         if (noffH.initData.size > 0) {
-            Debug.println('a', "[PageTable.allocateNewProcess] Initializing data segment, at " +
+            Debug.println('x', "[PageTable.allocateNewProcess] Initializing data segment, at " +
                     noffH.initData.virtualAddr + ", size " +
                     noffH.initData.size);
 
-            copyToMainMemory(
+            copyToSwapPartition(
                     executable, 
                     noffH.initData.inFileAddr, 
                     (int)noffH.initData.size, 
@@ -432,7 +469,7 @@ public class PageTable {
     }
     
     /**
-     * Copies <code>size</code> bits from <code>executable</code> file into main Memory starting at the file offset given by <code>fileOffset</code>
+     * Copies <code>size</code> bits from <code>executable</code> file into the swapping partition starting at the file offset given by <code>fileOffset</code>
      * using this inverted page table, offset by <code>virtualPageOffset</code> and <code>bitOffset</code>.
      * 
      * @param executable Executable file to read from.
@@ -440,37 +477,50 @@ public class PageTable {
      * @param size Number of bits to write to main memory.
      * @param processId Process id that is being loaded into memory.
      * @param virtualPageOffset Which will be the first translation entry to use.
-     * @param bitOffset How many bits from the beginning of a page we want to offset.
+     * @param byteOffset How many bytes from the beginning of a page we want to offset.
      * 
      * @throws IOException if something goes wrong
      */
-    void copyToMainMemory(RandomAccessFile executable, long fileOffset, int size, int processId, int virtualPageOffset, int bitOffset) 
+    void copyToSwapPartition(RandomAccessFile executable, long fileOffset, int size, int processId, int virtualPageOffset, int byteOffset) 
         throws IOException {
         // first off, see how many "full" pages we need to copy from the file to memory
         int fullPages = size / Machine.PageSize;
-        int remainderBits = (size % Machine.PageSize);
+        int remainderBytes = (size % Machine.PageSize);
         
         // move the pointer in the file
         executable.seek(fileOffset);
+        
+        // buffer to read from exec file
+        byte[] buffer = new byte[Machine.PageSize];
         
         // start copying full pages
         for (int i = virtualPageOffset, n = virtualPageOffset + fullPages; i < n; i++) {
             // first, get the page entry for this desired virtual page
             PageTableEntry entry = getEntry(processId, i);
-            Debug.printf('a', "[PageTable.copyToMainMemory] Copying code/data (full page) to physical page [%d] with [%d] bits offset.\n", 
-                              new Long(entry.translationEntry.physicalPage), new Long(bitOffset));
-            int read = executable.read(Machine.mainMemory, (entry.translationEntry.physicalPage * Machine.PageSize) + bitOffset, Machine.PageSize);
-            Debug.ASSERT(read == Machine.PageSize, "[PageTable.copyToMainMemory] Could not read the entire page from file!!!");
+            Debug.printf('x', "[PageTable.copyToSwapPartition] Copying code/data (full page) to swap partition page [%d] with [%d] bytes offset.\n", 
+                              new Long(entry.swapPage), new Long(byteOffset));
+            
+            // instead of reading directly into main memory, we will use a buffer to put the data to later write it into the swap partition
+            int read = executable.read(buffer, 0, Machine.PageSize);
+            Debug.ASSERT(read == Machine.PageSize, "[PageTable.copyToSwapPartition] Could not read the entire page from file!!!");
+            
+            // we now have the data from the file, put it on the swap partition
+            SwapPartitionController.getInstance().writePage(buffer, entry.swapPage, byteOffset);
         }
         
-        // now, the remainder bits
-        if (remainderBits > 0) {
+        // now, the remainder bytes
+        if (remainderBytes > 0) {
             PageTableEntry entry = getEntry(processId, virtualPageOffset + fullPages);
-            // now, we can write the remaining bits
-            Debug.printf('a', "[PageTable.copyToMainMemory] Copying code/data (%d bits) to physical page [%d] with [%d] offset inside the page.\n", 
-                              new Object[] {new Long(remainderBits), new Long(entry.translationEntry.physicalPage), new Long(bitOffset)});
-            int read = executable.read(Machine.mainMemory, (entry.translationEntry.physicalPage * Machine.PageSize)+ bitOffset, remainderBits);
-            Debug.ASSERT(read == remainderBits, "[PageTable.copyToMainMemory] Could not read completely from file!!!");
+            // now, we can write the remaining bytes
+            Debug.printf('x', "[PageTable.copyToSwapPartition] Copying code/data (%d bytes) to swap parttion page [%d] with [%d] offset inside the page.\n", 
+                              new Object[] {new Long(remainderBytes), new Long(entry.swapPage), new Long(byteOffset)});
+            
+            // read into the buffer
+            int read = executable.read(buffer, 0, remainderBytes);
+            Debug.ASSERT(read == remainderBytes, "[PageTable.copyToSwapPartition] Could not read completely from file!!!");
+            
+            // and write the buffer to the swap partition
+            SwapPartitionController.getInstance().writeData(buffer, remainderBytes, entry.swapPage, byteOffset);
         }
         
     }
@@ -482,8 +532,10 @@ public class PageTable {
     static class PageTableEntry {
         // process owining this page
         int processId;
-        // if not -1, it means that this page is resident in disk
-        int pageOffsetInDisk;
+        // page number on swap partition
+        int swapPage;
+        // where is this page right now?
+        boolean inMainMemory;
         // reuse-reuse-REUSE!!!
         TranslationEntry translationEntry;
         // pointer to the next entry
@@ -491,9 +543,24 @@ public class PageTable {
         
         public PageTableEntry(int processId) {
             this.processId = processId;
-            pageOffsetInDisk = -1;
+            swapPage = -1;
             translationEntry = new TranslationEntry();
             nextPageTableEntry = null;
+        }
+        
+        public String toString() {
+            StringBuffer buffer = new StringBuffer("[PageTableEntry, processId=");
+            buffer.append(processId);
+            buffer.append(", swapPage=");
+            buffer.append(swapPage);
+            buffer.append(", inMainMemory=");
+            buffer.append(inMainMemory);
+            buffer.append(", virtualPage=");
+            buffer.append(translationEntry.virtualPage);
+            buffer.append(", physicalPage=");
+            buffer.append(translationEntry.physicalPage);
+            buffer.append(']');
+            return buffer.toString();
         }
     }
     

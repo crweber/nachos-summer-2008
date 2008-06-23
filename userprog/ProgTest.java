@@ -55,7 +55,7 @@ class ProgTest implements Runnable {
         } catch (NachosException ne) {
             // not enough free pages
             Debug.printf('+',
-                    "Could not find enough pages to allocate process [%s]\n",
+                    "[ProgTest.run] Could not find enough pages to allocate process [%s]\n",
                     execName);
             return;
         }

@@ -47,6 +47,8 @@ class AddrSpace {
   //----------------------------------------------------------------------
 
   public AddrSpace(RandomAccessFile executable) throws IOException, NachosException {
+      Debug.ASSERT(false, "ADDRESS SPACE SHOULD NOT BE USED ANYMORE... BAD BOY!");
+      /* WE DONT USE THIS CODE ANYMORE!!!
       NoffHeader noffH;
       long size;
 
@@ -66,9 +68,8 @@ class AddrSpace {
       // to run anything too big --
       // at least until we have
       // virtual memory
-      
       // check we have enough free pages
-      if (!MemoryManagement.instance.enoughPages(numPages)) {
+      if (!MemoryManagement.getInstance().enoughPages(numPages)) {
           // no harm done... just throw an exception
           throw new NachosException("Not enough free pages!");
       }
@@ -142,7 +143,7 @@ class AddrSpace {
           //executable.read(Machine.mainMemory, (int)noffH.initData.virtualAddr, 
           //        (int)noffH.initData.size);
       }
-    
+    */
   }
   
   public int getNumPages() {
