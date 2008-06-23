@@ -394,7 +394,8 @@ public class PageTable {
         // check we have enough free pages
         if (!MemoryManagement.getInstance().enoughPages(numPages, MemoryManagement.MEMORY_TYPE_SWAP)) {
             // no harm done... just throw an exception
-            throw new NachosException("[PageTable.allocateNewProcess] Not enough free pages!");
+            Debug.println('x', "[PageTable.allocateNewProcess] Not enough free pages! Requested " + numPages);
+            throw new NachosException("[PageTable.allocateNewProcess] Not enough free pages! Requested " + numPages);
         }
 
         Debug.println('x', "[PageTable.allocateNewProcess] Loading process, numPages=" + numPages + ", size=" + size);
