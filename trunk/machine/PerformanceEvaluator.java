@@ -1,17 +1,10 @@
 import java.io.BufferedWriter;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.Writer;
-import java.util.Arrays;
 import java.util.Hashtable;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-
-import com.sun.xml.internal.ws.api.pipe.NextAction;
 
 public class PerformanceEvaluator {
 
@@ -36,7 +29,7 @@ public class PerformanceEvaluator {
 			this.tlbMiss = tlbMiss;
 		}
 
-		@Override
+		//@Override
 		public String toString() {
 			// TODO Auto-generated method stub
 
@@ -55,7 +48,7 @@ public class PerformanceEvaluator {
 	public static void tlbMiss(int processId, int virtualAddress, boolean miss) {
 
 		tlbMisses.add(perf.new Key(processId, virtualAddress / 128, miss));
-		capacityMisses.put(buildKey(processId, virtualAddress / 128), true);
+		capacityMisses.put(buildKey(processId, virtualAddress / 128), new Boolean(true));
 //		try {
 //			perf.bw.write(processId + " " + (virtualAddress / 128) + " " + miss
 //					+ "\n");
