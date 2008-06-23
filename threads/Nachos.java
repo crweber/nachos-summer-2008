@@ -129,7 +129,10 @@ class Nachos implements Runnable {
 	// ----------------------------------------------------------------------
 
 	public void run() {
-
+        // init the memory manager and the swap partition controller
+	    SwapPartitionController.getInstance().init();
+        MemoryManagement.getInstance().init();
+        
 		String debugArgs = "";
 		boolean format = false; // format disk
 		boolean randomYield = false;
@@ -354,7 +357,7 @@ class Nachos implements Runnable {
                 break;
 			case SC_Write:
 				
-				Debug.println('+', "Write initiated by user");
+				Debug.println('x', "[Nachos.exceptionHandler] Write initiated by user");
                 // first parameter, vaddr of the buffer to write from
                 int vaddrWrite = Machine.readRegister(4);
                 // how many bytes we want to write
@@ -367,7 +370,7 @@ class Nachos implements Runnable {
 				
                 if (bufferWrite.length != sizeWrite)
                 {
-                    Debug.println('+', "Could not copy data from user address space");
+                    Debug.println('x', "[Nachos.exceptionHandler] Could not copy data from user address space");
                 }
                 
                 //write data from buffer
@@ -379,7 +382,7 @@ class Nachos implements Runnable {
 				break;
 			case SC_Read:
 				
-				Debug.println('+', "Read initiated by user");
+				Debug.println('x', "[Nachos.exceptionHandler] Read initiated by user");
                 // first parameter, vaddr of the buffer to write from
                 int vaddrRead = Machine.readRegister(4);
                 // how many bytes we want to write
@@ -394,7 +397,7 @@ class Nachos implements Runnable {
 				// write data from kernel to user address space
                 if (PageTable.getInstance().copyFromKernel(bufferRead, vaddrRead) != retValRead)
                 {
-                    Debug.println('+', "Could not copy data to user address space");
+                    Debug.println('x', "[Nachos.exceptionHandler] Could not copy data to user address space");
                 }
                 
                 // write result
@@ -404,7 +407,7 @@ class Nachos implements Runnable {
                 
             case SC_Create:
 
-				Debug.println('+', "Create initiated by user");
+				Debug.println('x', "[Nachos.exceptionHandler] Create initiated by user");
 				// read address from first argument
 				int vaddr = Machine.readRegister(4);
 
@@ -425,7 +428,7 @@ class Nachos implements Runnable {
 				break;
 			case SC_Open:
 
-				Debug.println('+', "Open initiated by user");
+				Debug.println('x', "[Nachos.exceptionHandler] Open initiated by user");
 				// read address from first argument
 				int vaddrOpen = Machine.readRegister(4);
 
@@ -446,7 +449,7 @@ class Nachos implements Runnable {
 				break;
 			case SC_Remove:
 
-				Debug.println('+', "Remove initiated by user");
+				Debug.println('x', "[Nachos.exceptionHandler] Remove initiated by user");
 				// read address from first argument
 				int vaddrRemove = Machine.readRegister(4);
 
@@ -468,7 +471,7 @@ class Nachos implements Runnable {
 				
 			case SC_Close:
 
-				Debug.println('+', "Close initiated by user");
+				Debug.println('x', "[Nachos.exceptionHandler] Close initiated by user");
 				// read address from first argument
 				int fileId = Machine.readRegister(4);
 				// call method
@@ -775,7 +778,7 @@ class Nachos implements Runnable {
                 retVal = file.write(buffer, 0, size);
                              
                 //check for correct values
-                Debug.printf('+', "Written buffer: %s ", new String(buffer));
+                Debug.printf('x', "[Nachos.Write] Written buffer: %s\n", new String(buffer));
                 Debug.ASSERT(retVal >=0 && retVal <= size);
                 
                 
@@ -818,17 +821,17 @@ class Nachos implements Runnable {
 		OpenFileStub file = NachosThread.thisThread().getOpenFile(id);
         if (file == null)
         {
-                Debug.println('+', "File not found");
+                Debug.println('x', "[Nachos.Read] File not found");
                 retVal = -1;
         }
         else
         {
                 // read data from file
                 retVal = file.read(buffer, 0, size);
-                buffer[retVal] = '\0';
+                //buffer[retVal] = '\0';
                 
                 //check for correct values
-                Debug.printf('+', "Read buffer: %s ", new String(buffer));
+                Debug.printf('x', "[Nachos.Read] Read buffer: %s ", new String(buffer));
                 Debug.ASSERT(retVal >=0 && retVal <= size);
                 
                 
@@ -843,7 +846,7 @@ class Nachos implements Runnable {
 		// delete file id from open file table
 		OpenFile file = NachosThread.thisThread().deleteOpenFile(id);
 		if (file == null) {
-			Debug.println('+', "Invalid file id");
+			Debug.println('x', "[Nachos.Close] Invalid file id");
 		}
 	}
 

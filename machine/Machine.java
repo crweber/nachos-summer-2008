@@ -50,7 +50,7 @@ class Machine {
 					// the disk sector size, for
 					// simplicity
 
-  public static final int NumPhysPages = 128; /*32;*/
+  public static final int NumPhysPages = 128;
   static final int MemorySize = NumPhysPages * PageSize;
   static final int TLBSize = 4;		// if there is a TLB, make it small
 
