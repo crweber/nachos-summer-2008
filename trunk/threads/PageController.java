@@ -37,13 +37,22 @@ public class PageController {
      * @return The index of the tlb entry to evict.
      */
     private int nextTlbEntryToEvict() {
-        // we want to return the current index
-        int current = currentTlbIndex;
+        // we want to return either a random entity to evict, or the first one that is unused
+        boolean emptySlotFound = false;
+        int indexToEvict = -1;
+        for (int i = 0; i < Machine.TLBSize; i++) {
+            if (Machine.tlb[i] == null || Machine.tlb[i].valid == false) {
+                emptySlotFound = true;
+                indexToEvict = i;
+            }
+        }
         
-        // increment the current to next index
-        currentTlbIndex = (currentTlbIndex + 1) % Machine.TLBSize; 
+        if (!emptySlotFound) {
+            // random
+            indexToEvict = (int)(Math.random()*100) % Machine.TLBSize;
+        }
         
-        return current;
+        return indexToEvict;
     }
     
     /**
@@ -59,6 +68,20 @@ public class PageController {
         currentFrameIndex = (currentFrameIndex + 1) % SwapPartitionController.SWAP_SIZE_PAGES;
         
         return current;
+    }
+    
+    private int nextFrameToEvictLastResort() {
+        // look for a random entry
+        int current = (int)(Math.random()*100) % SwapPartitionController.SWAP_SIZE_PAGES;
+        // get an entry
+        PageTable.PageTableEntry entry = PageTable.getInstance().getEntriesAt(current);
+        // stop until we find something that is in main memory
+        while (entry == null || !entry.inMainMemory) {
+            current = (int)(Math.random()*100) % SwapPartitionController.SWAP_SIZE_PAGES;;
+            entry = PageTable.getInstance().getEntriesAt(current);
+        }
+        return current;
+        
     }
     
     /**
@@ -92,6 +115,8 @@ public class PageController {
             // if not, we will need to evict one page!
             // so first, is there enough space in main memory?
             if (MemoryManagement.getInstance().enoughPages(1, MemoryManagement.MEMORY_TYPE_MAIN)) {
+                // compulsory page fault
+                PerformanceEvaluator.pageFault(entry.processId, entry.translationEntry.virtualPage);
                 // yes, enough space on main memory, so just bring it over and update the page descriptor
                 // get the physical page to where this page will be allocated first
                 int physicalPage = MemoryManagement.getInstance().allocatePage(MemoryManagement.MEMORY_TYPE_MAIN);
@@ -163,7 +188,7 @@ public class PageController {
         // it could be that the current process occupies the whole main memory...
         if (pageToEvict == null) {
             // just evict something!
-            pageToEvict = PageTable.getInstance().getEntriesAt(nextFrameToEvict());
+            pageToEvict = PageTable.getInstance().getEntriesAt(nextFrameToEvictLastResort());
         }
         
         // we now have a page to evict
