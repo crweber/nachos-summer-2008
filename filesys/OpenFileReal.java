@@ -112,6 +112,20 @@ class OpenFileReal implements OpenFile {
     int fileLength = hdr.fileLength();
     int i, firstSector, lastSector, numSectors;
     byte buf[];
+    
+    //lock and read
+    OpenFileDescriptor ofd = OpenFileManipulator.getOpenFile(this);
+    if (ofd == null) {
+    	//impossible to read from a closed file
+    	return -1;
+    }
+        
+    //if writing, wait to finish the write so that the changes are reflected
+    while (ofd.writeLockAcquired()){
+    	NachosThread.thisThread().sleep();
+    }
+    //acquire lock for reading
+    ofd.addReader();
 
     if ((numBytes <= 0) || (position >= fileLength))
       return 0; 				// check request
@@ -134,6 +148,15 @@ class OpenFileReal implements OpenFile {
     // copy the part we want
     System.arraycopy(buf, (int)position - (firstSector * Disk.SectorSize),
 		     into, index, numBytes);
+    
+    //release lock for reading
+    ofd.removeReader();
+    ofd.removeOpenFile(this);
+    //if file was deleted and it is the last opened file, signal the remove method
+    if (hdr.isDeleted() && ofd.noOfOpeners() == 0){
+    	ofd.releaseDeleteLock();
+    	ofd.notifyDeleteLock();
+    }
     return numBytes;
   }
 
@@ -143,6 +166,16 @@ class OpenFileReal implements OpenFile {
     int i, firstSector, lastSector, numSectors;
     boolean firstAligned, lastAligned;
     byte buf[];
+    
+   
+    OpenFileDescriptor ofd = OpenFileManipulator.getOpenFile(this);
+    if (ofd == null) {
+    	//impossible to read from a closed file
+    	return -1;
+    }
+        
+    //acquire write lock
+    ofd.acquireWriteLock();
 
     if ((numBytes <= 0) || (position >= fileLength))
       return 0;				// check request
@@ -178,6 +211,14 @@ class OpenFileReal implements OpenFile {
       Nachos.synchDisk.writeSector(hdr.byteToSector(i * Disk.SectorSize), 
 			    buf, (i - firstSector) * Disk.SectorSize);
 
+    //release lock for reading
+    ofd.releaseWriteLock();
+    ofd.removeOpenFile(this);
+    //if file was deleted and it is the last opened file, signal the remove method
+    if (hdr.isDeleted() && ofd.noOfOpeners() == 0){
+    	ofd.releaseDeleteLock();
+    	ofd.notifyDeleteLock();
+    }
     return numBytes;
   }
 
