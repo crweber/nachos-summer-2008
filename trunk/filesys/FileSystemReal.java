@@ -252,6 +252,20 @@ class FileSystemReal implements FileSystem {
     sector = directory.find(name); 
     if (sector >= 0) 		
       openFile = new OpenFileReal(sector);// name was found in directory 
+    
+    //keep track of opened file
+    OpenFileDescriptor ofd = OpenFileManipulator.getOpenFile(name);
+    //if file was deleted, we do not allow it to be opened
+    if (ofd != null && ofd.isToBeDeleted()){
+    	Debug.print('+', "File was deleted!");
+    	return null;
+    }
+   
+   	if (openFile != null){
+   		OpenFileManipulator.addOpenFile(name, openFile);
+   	}
+    
+   
     return openFile;			// return null if not found
   }
 
@@ -284,6 +298,21 @@ class FileSystemReal implements FileSystem {
     fileHdr = new FileHeader();
     fileHdr.fetchFrom(sector);
 
+    //check opened files list
+    OpenFileDescriptor ofd = OpenFileManipulator.getOpenFile(name);
+    if (ofd != null){
+    	ofd.setToBeDeleted();
+    	
+    	//if file opened by many, wait to be notified by the last one
+    	while (ofd.noOfOpeners() > 1){
+    		
+    		//wait for all files to finish reading/writing
+    		ofd.acquireDeleteLock();
+    		fileHdr.setDeleted(true);
+    		//release control and wait to be notified
+    		ofd.waitDeleteLock();
+    	}
+    }
     freeMap = new BitMap(Disk.NumSectors);
     freeMap.fetchFrom(freeMapFile);
 
@@ -293,6 +322,9 @@ class FileSystemReal implements FileSystem {
 
     freeMap.writeBack(freeMapFile);		// flush to disk
     directory.writeBack(directoryFile);        // flush to disk
+    
+    //remove file from opened list
+    OpenFileManipulator.removeOpenFile(name);
     return true;
   } 
 

@@ -91,6 +91,13 @@ class FileHeader {
 		lastLsector = -1;
 		lastPsector = -1;
 	}
+	
+	public void setDeleted(boolean deleted){
+		this.deleted = deleted;
+	}
+	public boolean isDeleted(){
+		return deleted;
+	}
 
 	// the following methods deal with conversion between the on-disk and
 	// the in-memory representation of a DirectoryEnry.
