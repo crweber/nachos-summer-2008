@@ -120,10 +120,7 @@ class OpenFileReal implements OpenFile {
     	return -1;
     }
         
-    //if writing, wait to finish the write so that the changes are reflected
-    while (ofd.writeLockAcquired()){
-    	NachosThread.thisThread().sleep();
-    }
+   
     //acquire lock for reading
     ofd.addReader();
 
@@ -170,6 +167,7 @@ class OpenFileReal implements OpenFile {
    
     OpenFileDescriptor ofd = OpenFileManipulator.getOpenFile(this);
     if (ofd == null) {
+    	
     	//impossible to read from a closed file
     	return -1;
     }

@@ -139,6 +139,9 @@ class FileSystemReal implements FileSystem {
 
       freeMapFile = new OpenFileReal(FreeMapSector);
       directoryFile = new OpenFileReal(DirectorySector);
+      if (directoryFile != null){
+     		OpenFileManipulator.addOpenFile("directory", directoryFile);
+     	}
      
       // Once we have the files "open", we can write the initial version
       // of each file back to disk. The directory at this point is completely
@@ -161,6 +164,9 @@ class FileSystemReal implements FileSystem {
       // running
       freeMapFile = new OpenFileReal(FreeMapSector);
       directoryFile = new OpenFileReal(DirectorySector);
+      if (directoryFile != null){
+   		OpenFileManipulator.addOpenFile("directory", directoryFile);
+   	}
     }
   }
 
