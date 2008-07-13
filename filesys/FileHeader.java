@@ -67,7 +67,7 @@ class FileHeader {
 	public static final int NUM_REFS_METADATA = 2;
 	// number of references to blocks with level 0 indirection, that is,
 	// keeping a reference to a block itself
-	public static final int NUM_L0_REFS = 8;
+	public static final int NUM_L0_REFS = 4;
 	// number of references to blocks with level 1 indirection, that is,
 	// keeping a reference to a block that itself keeps reference
 	// to a block
