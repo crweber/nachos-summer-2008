@@ -24,7 +24,7 @@ public class SwapPartitionController {
     
     // right now, we will use a random access file, later on, when the file system is implemented
     // this might go away
-    private RandomAccessFile swapFile;
+    //private RandomAccessFile swapFile;
     
     // enforce only one instance of this controller, and of the swap partition too
     private SwapPartitionController() {
@@ -35,27 +35,12 @@ public class SwapPartitionController {
     public void init() {
         Debug.ASSERT(alreadyInitialized == false, "[SwapPartitionController.init] Cannot initialize more than once!");
         
-        // check if the swap file already exists... if so, just delete it... this will happen only once
-        // per nachos boot-up
-        File swapFileTmp = new File("swap-partition");
-        if (swapFileTmp.exists()) {
-            if (!swapFileTmp.delete()) {
-                Debug.println('+', "[SwapPartitionController] Could not reset swap partition. PANIC!");
-                Nachos.Halt();
-            }
-        }
-        
-        // at this point, we can safely create the swap partition
-        try {
-            swapFile = new RandomAccessFile(swapFileTmp, "rw");
-        }
-        catch (IOException ioe) {
-            Debug.println('+', "[SwapPartitionController] PANIC - " + ioe.getMessage());
-            Debug.println('+', "[SwapPartitionController] Could not create swap partition. PANIC!");
+        Nachos.fileSystem.remove("swap");
+        if (!Nachos.fileSystem.create("swap", SWAP_SIZE_BYTES)) {
+            Debug.println('+', "[SwapPartitionController] Could not reset swap partition. PANIC!");
             Nachos.Halt();
         }
-        
-        swapPartition = new OpenFileStub(swapFile);
+        swapPartition = Nachos.fileSystem.open("swap");
         
         // now, we can initialize the swap partition... just write out one byte after seeking
         // to the end of the file... nice trick!

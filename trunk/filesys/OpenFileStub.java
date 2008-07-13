@@ -92,5 +92,10 @@ class OpenFileStub implements OpenFile {
     }
     return len;
   }
+  
+  public int getFileId() {
+      // this is just a stub
+      return 1;
+  }
 
 }

@@ -1,5 +1,6 @@
 import java.util.ArrayList;
-import java.util.Hashtable;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * This class stores all the properties for an open file. Through this class we
@@ -19,6 +20,7 @@ class OpenFileDescriptor {
 	//a deleted file must wait until all the reading/writing is finished
 	private Lock deleteLock;
 	private Condition deleteCondition;
+	private int id;
 
 	OpenFileDescriptor() {
 		writeLock = new Lock("writeLock");
@@ -32,6 +34,7 @@ class OpenFileDescriptor {
 
 	OpenFileDescriptor(OpenFile of) {
 		this();
+		this.id = of.getFileId();
 		openers.add(of);
 	}
 
@@ -93,6 +96,18 @@ class OpenFileDescriptor {
 	public boolean isToBeDeleted() {
 		return toBeDeleted;
 	}
+	
+	public boolean equals(Object obj) {
+	    if (obj == null || !(obj instanceof OpenFileDescriptor)) {
+	          return false;
+	    }
+	    OpenFileDescriptor fileDescriptor = (OpenFileDescriptor)obj;
+	    return (this.id == fileDescriptor.id);
+	}
+	  
+	public int hashCode() {
+	    return this.id;
+	}
 
 }
 
@@ -104,35 +119,20 @@ class OpenFileDescriptor {
 public class OpenFileManipulator {
 
 	//identify the list by OpenFile and name
-	private static final Hashtable openFiles = new Hashtable();
-	private static final Hashtable openedFiles = new Hashtable();
+	private static final Map openedFiles = new HashMap();
 
 	//add/renew an OpenFile object to the list
-	public static void addOpenFile(String fileName, OpenFile of) {
-
-		OpenFileDescriptor existing = (OpenFileDescriptor) openFiles
-				.get(fileName);
-		if (existing != null) {
-			existing.addOpenFile(of);
-			openFiles.put(fileName, existing);
-			openedFiles.put(of, existing);
-		} else {
-			OpenFileDescriptor ofd = new OpenFileDescriptor(of);
-			openFiles.put(fileName, ofd);
-			openedFiles.put(of, ofd);
-		}
-	}
-
-	public static OpenFileDescriptor getOpenFile(String name) {
-		return (OpenFileDescriptor) openFiles.get(name);
+	public static void addOpenFile(OpenFile of) {
+	    OpenFileDescriptor ofd = new OpenFileDescriptor(of);
+	    openedFiles.put(of, ofd);
 	}
 
 	public static OpenFileDescriptor getOpenFile(OpenFile openFile) {
 		return (OpenFileDescriptor) openedFiles.get(openFile);
 	}
 
-	public static void removeOpenFile(String name) {
-		openFiles.remove(name);
+	public static void removeOpenFile(OpenFile openFile) {
+		openedFiles.remove(openFile);
 	}
 
 }
