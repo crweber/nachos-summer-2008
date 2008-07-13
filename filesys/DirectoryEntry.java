@@ -13,54 +13,79 @@
 // access them directly.
 
 class DirectoryEntry {
-                                    // for simplicity, we assume 
-				    // file names are <= 9 characters long
-  public static final int FileNameMaxLen = 9;
+    // flat representation:
+    // 0 - 3:           nameLength
+    // 4 - 7:           sector
+    // 8 - (up to) 16:  name
+    // files will have at most 9 characters
+    public static final int MAX_FILE_NAME_LENGTH = 9;
+    // max size of an entry
+    public static final int MAX_ENTRY_SIZE = MAX_FILE_NAME_LENGTH + 4 + 4;
+    // size without the name (sector + nameLen)
+    public static final int METADATA_SIZE = 4 + 4;
+    // in which sector we can find the file
+    public int sector; 
+    // how big is the name of the file 
+    public int nameLen;
+    // the name of the file itself
+    public String name;
 
-  public boolean inUse;			// Is this directory entry in use?
-  public int sector;			// Location on disk to find the 
-					//   FileHeader for this file 
-  public int nameLen;                   // lenght of filename
-  //public char name[FileNameMaxLen];	// Text name for file (on disk)
-  public String name;	                // Text name for file
+    public DirectoryEntry() {
+        name = "";
+    }
 
-  public DirectoryEntry() {
-    name = "";
-  }
+    // the following methods deal with conversion between the on-disk and
+    // the in-memory representation of a DirectoryEnry.
+    // Note: these methods must be modified if any instance variables 
+    // are added!!
 
-  // the following methods deal with conversion between the on-disk and
-  // the in-memory representation of a DirectoryEnry.
-  // Note: these methods must be modified if any instance variables 
-  // are added!!
+    // return size of flat (on disk) representation
+    public int sizeOf() {
+        // name.length + sizeof(sector) + sizeof(nameleng)
+        return (name.length() + 4 + 4);
+    }
 
-  // return size of flat (on disk) representation
-  public static int sizeOf() {
-    return 1 + 4 + 4 + FileNameMaxLen;
-  }
+    // initialize from a flat (on disk) representation
+    public void fromDiskFormat(byte[] buffer, int pos) {
+            nameLen = Disk.intInt(buffer, pos);
+            pos += 4;
+            sector = Disk.intInt(buffer, pos);
+            pos += 4;
+            StringBuilder builder = new StringBuilder(nameLen);
+            for (int i = 0; i < nameLen; i++) {
+                builder.append((char)buffer[i + pos]);
+            }
+            name = builder.toString();
+    }
+
+    // externalize to a flat (on disk) representation
+    // returns how many bytes advanced in the buffer
+    public int toDiskFormat(byte[] buffer, int pos) {
+        Disk.extInt(nameLen, buffer, pos);
+        pos += 4;
+        Disk.extInt(sector, buffer, pos);
+        pos += 4;
+        byte[] nameBytes = name.getBytes();
+        for (int i = 0; i < nameLen; i++) {
+            buffer[pos + i] = nameBytes[i];
+        }
+        return (4 + 4 + nameLen);
+    }
     
-  // initialize from a flat (on disk) representation
-  public void internalize(byte[] buffer, int pos) {
-    if (buffer[pos] != 0) {
-      inUse = true; 
-      sector = Disk.intInt(buffer, pos+1);
-      nameLen = Disk.intInt(buffer, pos+5);
-      name = new String(buffer, 0, pos+9, nameLen);
-      //System.out.println("internalize, name=" + name + "nameLen=" + nameLen);
-    } else 
-      inUse = false;
-  }
-
-  // externalize to a flat (on disk) representation
-  public void externalize(byte[] buffer, int pos) {
-    if (inUse) { 
-      buffer[pos] = 1; 
-      Disk.extInt(sector, buffer, pos+1);
-      Disk.extInt(nameLen, buffer, pos+5);
-      name.getBytes(0, nameLen, buffer, pos+9);
-      //System.out.println("externalize, name=" + name + "nameLen=" + nameLen);
-    } else 
-      buffer[pos] = 0;
-  }
+    // returns an entry based on a buffer containing flat (disk format) info
+    public static DirectoryEntry createFromDiskFormat(byte[] buffer, int pos) {
+        DirectoryEntry entry = new DirectoryEntry();
+        entry.fromDiskFormat(buffer, pos);
+        return entry;
+    }
+    
+    public boolean equals(Object obj){
+        if (obj == null || !(obj instanceof DirectoryEntry)) {
+            return false;
+        }
+        DirectoryEntry entry = (DirectoryEntry)obj;
+        return (entry.name.equals(this.name) && entry.sector == this.sector);
+    }
 
 }
 

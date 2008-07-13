@@ -79,10 +79,6 @@ class FileSystemReal implements FileSystem {
   // of files that can be loaded onto the disk.
   public static final int FreeMapFileSize = (Disk.NumSectors / 
 					     BitMap.BitsInByte);
-  public static final int NumDirEntries = 10;
-  public static final int DirectoryFileSize = 
-        (DirectoryEntry.sizeOf() * NumDirEntries);
-
 
   private OpenFile freeMapFile;		// Bit map of free disk blocks,
 					// represented as a file
@@ -107,7 +103,7 @@ class FileSystemReal implements FileSystem {
     Debug.print('f', "Initializing the file system.\n");
     if (format) {
       BitMap freeMap = new BitMap(Disk.NumSectors);
-      Directory directory = new Directory(NumDirEntries);
+      Directory directory = new Directory();
       FileHeader mapHdr = new FileHeader();
       FileHeader dirHdr = new FileHeader();
 
@@ -120,9 +116,10 @@ class FileSystemReal implements FileSystem {
 
       // Second, allocate space for the data blocks containing the contents
       // of the directory and bitmap files.  There better be enough space!
-
+      
       Debug.ASSERT(mapHdr.allocate(freeMap, FreeMapFileSize));
-      Debug.ASSERT(dirHdr.allocate(freeMap, DirectoryFileSize));
+      // the directory will be empty when the disk has been formatted
+      Debug.ASSERT(dirHdr.allocate(freeMap, 0));
 
       // Flush the bitmap and directory FileHeaders back to disk
       // We need to do this before we can "Open" the file, since open
@@ -138,10 +135,10 @@ class FileSystemReal implements FileSystem {
       // while Nachos is running.
 
       freeMapFile = new OpenFileReal(FreeMapSector);
-      directoryFile = new OpenFileReal(DirectorySector);
-      if (directoryFile != null){
-     		OpenFileManipulator.addOpenFile("directory", directoryFile);
-     	}
+      directoryFile = new OpenFileReal(DirectorySector, freeMapFile);
+      OpenFileManipulator.addOpenFile(directoryFile);
+      OpenFileManipulator.addOpenFile(freeMapFile);
+      
      
       // Once we have the files "open", we can write the initial version
       // of each file back to disk. The directory at this point is completely
@@ -163,11 +160,10 @@ class FileSystemReal implements FileSystem {
       // the bitmap and directory; these are left open while Nachos is 
       // running
       freeMapFile = new OpenFileReal(FreeMapSector);
-      directoryFile = new OpenFileReal(DirectorySector);
-      if (directoryFile != null){
-   		OpenFileManipulator.addOpenFile("directory", directoryFile);
-   	}
-    }
+      directoryFile = new OpenFileReal(DirectorySector, freeMapFile);
+      OpenFileManipulator.addOpenFile(freeMapFile);
+      OpenFileManipulator.addOpenFile(directoryFile);
+    }    
   }
 
   //----------------------------------------------------------------------
@@ -209,10 +205,10 @@ class FileSystemReal implements FileSystem {
     Debug.printf('f', "Creating file %s, size %d\n", name, 
 		 new Long(initialSize));
 
-    directory = new Directory(NumDirEntries);
+    directory = new Directory();
     directory.fetchFrom(directoryFile);
 
-    if (directory.find(name) != -1)
+    if (directory.findEntry(name) != null)
       success = false;			// file is already in directory
     else {	
       freeMap = new BitMap(Disk.NumSectors);
@@ -249,18 +245,20 @@ class FileSystemReal implements FileSystem {
   //----------------------------------------------------------------------
 
   public OpenFile open(String name) { 
-    Directory directory = new Directory(NumDirEntries);
+    Directory directory = new Directory();
     OpenFile openFile = null;
     int sector;
 
     Debug.printf('f', "Opening file %s\n", name);
     directory.fetchFrom(directoryFile);
-    sector = directory.find(name); 
-    if (sector >= 0) 		
-      openFile = new OpenFileReal(sector);// name was found in directory 
+    DirectoryEntry entry = directory.findEntry(name); 
+    if (entry != null) {
+        sector = entry.sector;
+        openFile = new OpenFileReal(sector, freeMapFile);// name was found in directory
+    }
     
     //keep track of opened file
-    OpenFileDescriptor ofd = OpenFileManipulator.getOpenFile(name);
+    OpenFileDescriptor ofd = OpenFileManipulator.getOpenFile(openFile);
     //if file was deleted, we do not allow it to be opened
     if (ofd != null && ofd.isToBeDeleted()){
     	Debug.print('+', "File was deleted!");
@@ -268,7 +266,7 @@ class FileSystemReal implements FileSystem {
     }
    
    	if (openFile != null){
-   		OpenFileManipulator.addOpenFile(name, openFile);
+   		OpenFileManipulator.addOpenFile(openFile);
    	}
     
    
@@ -295,17 +293,19 @@ class FileSystemReal implements FileSystem {
     FileHeader fileHdr;
     int sector;
     
-    directory = new Directory(NumDirEntries);
+    directory = new Directory();
     directory.fetchFrom(directoryFile);
-    sector = directory.find(name);
-    if (sector == -1) {
+    DirectoryEntry entry = directory.findEntry(name);
+    if (entry == null) {
        return false;			 // file not found 
     }
+    sector = entry.sector;
     fileHdr = new FileHeader();
     fileHdr.fetchFrom(sector);
+    OpenFile openFile = new OpenFileReal(sector);
 
     //check opened files list
-    OpenFileDescriptor ofd = OpenFileManipulator.getOpenFile(name);
+    OpenFileDescriptor ofd = OpenFileManipulator.getOpenFile(openFile);
     if (ofd != null){
     	ofd.setToBeDeleted();
     	
@@ -330,18 +330,17 @@ class FileSystemReal implements FileSystem {
     directory.writeBack(directoryFile);        // flush to disk
     
     //remove file from opened list
-    OpenFileManipulator.removeOpenFile(name);
+    OpenFileManipulator.removeOpenFile(openFile);
     return true;
   } 
-
+  
   //----------------------------------------------------------------------
   // FileSystem::list
   // 	List all the files in the file system directory.
   //----------------------------------------------------------------------
 
   public void list() {
-    Directory directory = new Directory(NumDirEntries);
-
+    Directory directory = new Directory();
     directory.fetchFrom(directoryFile);
     directory.list();
   }
@@ -360,13 +359,13 @@ class FileSystemReal implements FileSystem {
     FileHeader bitHdr = new FileHeader();
     FileHeader dirHdr = new FileHeader();
     BitMap freeMap = new BitMap(Disk.NumSectors);
-    Directory directory = new Directory(NumDirEntries);
+    Directory directory = new Directory();
 
-    Debug.print('+', "Bit map file header:\n");
+    Debug.print('f', "Bit map file header:\n");
     bitHdr.fetchFrom(FreeMapSector);
     bitHdr.print();
 
-    Debug.print('+', "Directory file header:\n");
+    Debug.print('f', "Directory file header:\n");
     dirHdr.fetchFrom(DirectorySector);
     dirHdr.print();
 
@@ -376,6 +375,6 @@ class FileSystemReal implements FileSystem {
     directory.fetchFrom(directoryFile);
     directory.print();
 
-  } 
+  }
 
 }

@@ -39,5 +39,8 @@ public interface OpenFile {
   // than the UNIX idiom -- lseek to
   // end of file, tell, lseek back
   public long length();
+  
+  // get the unique file id
+  public int getFileId();
 
 }

@@ -186,11 +186,17 @@ class Debug {
   static private void kprintn(long l, int base) {
     char cBuf[] = new char[32];
     int i = 0;
-    
+    long j = l;
+    if (l < 0) {
+        j = -l;
+    }
     do {
-      cBuf[i++] = Ch[(int)(l % base)];
-    } while ((l /= base) != 0);
+      cBuf[i++] = Ch[(int)(j % base)];
+    } while ((j /= base) != 0);
     do {
+      if (l < 0) {
+          System.out.print('-');
+      }
       System.out.print(cBuf[--i]);
     } while (i > 0);
 

@@ -461,7 +461,7 @@ class NachosThread extends Thread implements Printable {
   /**
    * Add a new file to the list of opened files and return an ID
    */
-  int generateOpenFileId(OpenFileStub file)
+  int generateOpenFileId(OpenFile file)
   {
           
       // insert file to open file's table and return ID
@@ -490,9 +490,9 @@ class NachosThread extends Thread implements Printable {
    * @param fileId
    * @return the removed file
    */
-  OpenFileStub deleteOpenFile(int fileId)
+  OpenFile deleteOpenFile(int fileId)
   {
-    OpenFileStub tmp = null;
+    OpenFile tmp = null;
       
       //check that the fileId is valid
       if (fileId < 2 || fileId >= MaxOpenFiles)
@@ -502,7 +502,7 @@ class NachosThread extends Thread implements Printable {
       }
       else
       {
-              tmp = (OpenFileStub)openFiles.get(new Integer(fileId));
+              tmp = (OpenFile)openFiles.get(new Integer(fileId));
               openFiles.remove(new Integer(fileId));
       }
       return tmp;
@@ -511,9 +511,9 @@ class NachosThread extends Thread implements Printable {
   /**
    * 
    */
-  OpenFileStub getOpenFile(int fileId)
+  OpenFile getOpenFile(int fileId)
   {
-      OpenFileStub file = null;
+      OpenFile file = null;
       
       if (fileId < 2 || fileId >= MaxOpenFiles)
       {
@@ -521,7 +521,7 @@ class NachosThread extends Thread implements Printable {
       }
       else
       {
-              file = (OpenFileStub)openFiles.get(new Integer(fileId));
+              file = (OpenFile)openFiles.get(new Integer(fileId));
       }
       return file;
   }

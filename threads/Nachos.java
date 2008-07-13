@@ -129,8 +129,7 @@ class Nachos implements Runnable {
 	// ----------------------------------------------------------------------
 
 	public void run() {
-        // init the memory manager and the swap partition controller
-	    SwapPartitionController.getInstance().init();
+        // init the memory manager and the swap partition controller	    
         MemoryManagement.getInstance().init();
         
 		String debugArgs = "";
@@ -184,6 +183,9 @@ class Nachos implements Runnable {
 			else
 				fileSystem = new FileSystemReal(format);
 		}
+		
+		// init the swap partition
+	    SwapPartitionController.getInstance().init();
 
 		// if (THREADS)
 		// ThreadTest.start();
@@ -698,13 +700,13 @@ class Nachos implements Runnable {
 	 */
 	public static final int ConsoleInput = 0;
 	public static final int ConsoleOutput = 1;
-	public static final FileSystemStub kernelFileSystem = new FileSystemStub(true);
+	//public static final FileSystemStub kernelFileSystem = new FileSystemStub(true);
 
 	/* Create a Nachos file, with "name" */
 	public static boolean Create(String name) {
 		
 		if (name != null) {
-			return kernelFileSystem.create(name, 0);
+			return Nachos.fileSystem.create(name, 0);
 			
 		}
 		return false;
@@ -713,7 +715,7 @@ class Nachos implements Runnable {
 	/* Remove a Nachos file, with "name" */
     public static boolean Remove(String name) {
         if (name != null) {
-            return kernelFileSystem.remove(name);
+            return Nachos.fileSystem.remove(name);
 
         }
 
@@ -727,7 +729,7 @@ class Nachos implements Runnable {
 	public static int Open(String name) {
 		
 		int fileId;
-		OpenFileStub file = (OpenFileStub)kernelFileSystem.open(name);
+		OpenFile file = Nachos.fileSystem.open(name);
         if (file == null)
         {
                 Debug.println('+', "Open file failed");
@@ -766,7 +768,7 @@ class Nachos implements Runnable {
         }
 		
         //id is greater than 1
-        OpenFileStub file = NachosThread.thisThread().getOpenFile(id);
+        OpenFile file = NachosThread.thisThread().getOpenFile(id);
         if (file == null)
         {
                 Debug.println('+', "File not found");
@@ -818,7 +820,7 @@ class Nachos implements Runnable {
         }
 
         //id is greater than 1
-		OpenFileStub file = NachosThread.thisThread().getOpenFile(id);
+		OpenFile file = NachosThread.thisThread().getOpenFile(id);
         if (file == null)
         {
                 Debug.println('x', "[Nachos.Read] File not found");
