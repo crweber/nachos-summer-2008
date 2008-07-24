@@ -188,7 +188,9 @@ class OpenFileReal implements OpenFile {
       
       // we now have enough space in the file... extend the size of it
       long newBytes = (position + numBytes - length());
-      hdr.extendSize(newBytes);
+      if (newBytes > 0) {
+          hdr.extendSize(newBytes);
+      }
       
       int fileLength = hdr.fileLength();
       int i, firstSector, lastSector, numSectors;
